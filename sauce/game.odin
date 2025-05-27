@@ -143,7 +143,10 @@ Entity :: struct {
 	max_health: f32,
 	current_health: f32,
 
-	//stats
+	// door
+	door_state: bald_user.Door_State,
+
+	// stats
 	vitality: int,
 	chance: int,
 	lockpick: int,
@@ -356,11 +359,20 @@ game_init :: proc() {
 			p = entity_create(.door)
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
+			p.door_state = bald_user.Door_State.Open
+		}
+		else if id == 447 {
+			p = entity_create(.door)
+			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
+			p.door_state = bald_user.Door_State.Locked
+			p.sprite = .door_closed
 		}
 		else if id == 448 {
 			p = entity_create(.door)
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
+			p.door_state = bald_user.Door_State.Open
 		}
 		else if id == 320 {
 			p = entity_create(.tile3)
@@ -655,7 +667,10 @@ setup_player :: proc(e: ^Entity) {
 						log.debug(random)
 						if success >= random {
 							append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name}))
+							cell.door_state = bald_user.Door_State.Open
+							cell.sprite = .door
 							e.lockpick += 1
+							ctx.gs.all_cells[(ctx.gs.player_cell_y + 1) * TILE_WIDTH + ctx.gs.player_cell_x] = false
 						}
 						else {
 							append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name}))

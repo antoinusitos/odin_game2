@@ -93,6 +93,7 @@ Sprite_Name :: enum {
 	wall,
 	dot,
 	door,
+	door_closed,
 }
 
 sprite_data: [Sprite_Name]Sprite_Data = #partial {
@@ -168,6 +169,14 @@ month_to_string :: proc(input : Month) -> string {
 			return "December"
 	}
 	return ""
+}
+
+//
+// entity
+
+Door_State :: enum u8 {
+	Open,
+	Locked,
 }
 
 //
