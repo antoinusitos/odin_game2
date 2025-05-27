@@ -88,7 +88,7 @@ core_app_init :: proc "c" () { // these sokol callbacks are c procs
 	// I prefer it right now over the raddbg output because it's faster for print debugging
 	// since it doesn't animate
 	when ODIN_OS == .Windows {
-		win32.FreeConsole()
+		//win32.FreeConsole()
 	}
 
 	sound.init()

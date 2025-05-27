@@ -23,6 +23,9 @@ import "core:mem"
 import "core:math"
 import "core:math/linalg"
 
+import "core:strings"
+import "core:strconv"
+
 import sapp "bald:sokol/app"
 import spall "core:prof/spall"
 
@@ -31,7 +34,7 @@ WINDOW_TITLE :: "pixel detective"
 GAME_RES_WIDTH :: 1280//480
 GAME_RES_HEIGHT :: 720//270
 TILE_WIDTH :: 80
-TILE_HEIGHT :: 45
+TILE_HEIGHT :: 35
 window_w := 1280
 window_h := 720
 
@@ -62,6 +65,10 @@ Game_State :: struct {
 	player_cell: int,
 
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
+
+	time_hour: int,
+	time_minute: int,
+	tick_to_minute: f64,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -113,9 +120,23 @@ Entity :: struct {
 	hit_flash: Vec4,
 	sprite: Sprite_Name,
 	anim_index: int,
-  next_frame_end_time: f64,
-  loop: bool,
-  frame_duration: f32,
+ 	next_frame_end_time: f64,
+  	loop: bool,
+  	frame_duration: f32,
+
+	can_move: bool,
+	time_to_move: f32,
+
+	max_health: f32,
+	current_health: f32,
+
+	//stats
+	vitality: int,
+	chance: int,
+	lockpick: int,
+	hack: int,
+	endurance: int,
+	mana: int,
 	
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
@@ -169,7 +190,6 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 // main game procs
 
 app_init :: proc() {
-
 }
 
 app_frame :: proc() {
@@ -184,7 +204,75 @@ app_frame :: proc() {
 		x, y := screen_pivot(.top_left)
 		x += 2
 		y -= 2
-		draw.draw_text({x, y}, "hello world.", z_layer=.ui, pivot=Pivot.top_left)
+		player := get_player()
+		buf: [4]byte
+		result := strconv.itoa(buf[:], int(player.current_health))
+		str := string(result)
+		hp_string : string =  strings.concatenate({"HP : ", str})
+		draw.draw_text({x, y}, hp_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		//stats
+		x, y = screen_pivot(.top_left)
+		x += 100
+		y -= 2
+		result = strconv.itoa(buf[:], int(player.vitality))
+		str = string(result)
+		vitality_string : string =  strings.concatenate({"Vitality : ", str})
+		draw.draw_text({x, y}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		x, y = screen_pivot(.top_left)
+		x += 200
+		y -= 2
+		result = strconv.itoa(buf[:], int(player.chance))
+		str = string(result)
+		chance_string : string =  strings.concatenate({"Chance : ", str})
+		draw.draw_text({x, y}, chance_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		x, y = screen_pivot(.top_left)
+		x += 300
+		y -= 2
+		result = strconv.itoa(buf[:], int(player.endurance))
+		str = string(result)
+		endurance_string : string =  strings.concatenate({"Endurance : ", str})
+		draw.draw_text({x, y}, endurance_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		x, y = screen_pivot(.top_left)
+		x += 2
+		y -= 20
+		result = strconv.itoa(buf[:], int(player.lockpick))
+		str = string(result)
+		lockpick_string : string =  strings.concatenate({"Lockpick : ", str})
+		draw.draw_text({x, y}, lockpick_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		x, y = screen_pivot(.top_left)
+		x += 100
+		y -= 20
+		result = strconv.itoa(buf[:], int(player.hack))
+		str = string(result)
+		hack_string : string =  strings.concatenate({"Hack : ", str})
+		draw.draw_text({x, y}, hack_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		x, y = screen_pivot(.top_left)
+		x += 200
+		y -= 20
+		result = strconv.itoa(buf[:], int(player.mana))
+		str = string(result)
+		mana_string : string =  strings.concatenate({"Mana : ", str})
+		draw.draw_text({x, y}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		// TIME
+		x, y = screen_pivot(.top_right)
+		x -= 100
+		y -= 2
+		result = strconv.itoa(buf[:], int(ctx.gs.time_hour))
+		str = string(result)
+		buf2: [4]byte
+		hour_text_single := (ctx.gs.time_hour < 10 ? "0" : "")
+		result_minute := strconv.itoa(buf2[:], int(ctx.gs.time_minute))
+		str2 := string(result_minute)
+		minute_text_single := (ctx.gs.time_minute < 10 ? "0" : "")
+		time_hour_string : string =  strings.concatenate({"Time : ", hour_text_single, str, "h", minute_text_single, str2})
+		draw.draw_text({x, y}, time_hour_string, z_layer=.ui, pivot=Pivot.top_left)
 	}
 
 	sound.play_continuously("event:/ambiance", "")
@@ -198,6 +286,75 @@ app_frame :: proc() {
 
 app_shutdown :: proc() {
 	// called on exit
+
+}
+
+game_init :: proc() {
+	ctx.gs.time_hour = 9
+	ctx.gs.time_minute = 0
+
+	map_info := utils.map_from_file("./tiled/sans titre.tmj")
+
+	i := 0
+	for id in map_info.layers[0].data {
+		p : ^Entity = nil
+		if id == 27 {
+			p = entity_create(.tile)
+			ctx.gs.all_cells[i] = true
+		}
+		else if id == 844 {
+			p = entity_create(.wall)
+			ctx.gs.all_cells[i] = true
+			log.debug(i, "is true")
+		}
+		else if id == 894 {
+			p = entity_create(.wall)
+			ctx.gs.all_cells[i] = true
+		}
+		else if id == 880 {
+			p = entity_create(.dot)
+			ctx.gs.all_cells[i] = false
+		}
+		else if id == 177 {
+			p = entity_create(.tile2)
+			ctx.gs.all_cells[i] = true
+		}
+		else if id == 450 {
+			p = entity_create(.door)
+			ctx.gs.all_cells[i] = false
+		}
+		else if id == 448 {
+			p = entity_create(.door)
+			ctx.gs.all_cells[i] = false
+		}
+		else if id == 320 {
+			p = entity_create(.tile3)
+			ctx.gs.all_cells[i] = true
+		}
+		else if id == 224 {
+			p = entity_create(.tile4)
+			ctx.gs.all_cells[i] = true
+		}
+		else if id == 173 {
+			p = entity_create(.tile5)
+			ctx.gs.all_cells[i] = true
+		}
+		else {
+			ctx.gs.all_cells[i] = false
+		}
+
+		if p != nil {
+			x := i % TILE_WIDTH
+			//y := TILE_HEIGHT - ((i - x) / TILE_WIDTH) - 1
+			y := (i - x) / TILE_WIDTH
+			p.pos = Vec2{f32(x * 16), f32(y * 16)}
+		}
+
+		i += 1
+	}
+
+	player := entity_create(.player)
+	ctx.gs.player_handle = player.handle
 }
 
 game_update :: proc() {
@@ -213,66 +370,7 @@ game_update :: proc() {
 
 	// setup world for first game tick
 	if ctx.gs.ticks == 0 {
-		map_info := utils.map_from_file("./tiled/sans titre.tmj")
-
-		i := 0
-		for id in map_info.layers[0].data {
-			p : ^Entity = nil
-			if id == 27 {
-				p = entity_create(.tile)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 844 {
-				p = entity_create(.wall)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 894 {
-				p = entity_create(.wall)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 880 {
-				p = entity_create(.dot)
-				ctx.gs.all_cells[i] = false
-			}
-			else if id == 177 {
-				p = entity_create(.tile2)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 450 {
-				p = entity_create(.door)
-				ctx.gs.all_cells[i] = false
-			}
-			else if id == 448 {
-				p = entity_create(.door)
-				ctx.gs.all_cells[i] = false
-			}
-			else if id == 320 {
-				p = entity_create(.tile3)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 224 {
-				p = entity_create(.tile4)
-				ctx.gs.all_cells[i] = true
-			}
-			else if id == 173 {
-				p = entity_create(.tile5)
-				ctx.gs.all_cells[i] = true
-			}
-			else {
-				ctx.gs.all_cells[i] = false
-			}
-
-			if p != nil {
-				x := i % TILE_WIDTH
-				y := TILE_HEIGHT - ((i - x) / TILE_WIDTH) - 1
-				p.pos = Vec2{f32(x * 16), f32(y * 16)}
-			}
-
-			i += 1
-		}
-
-		player := entity_create(.player)
-		ctx.gs.player_handle = player.handle
+		game_init()
 	}
 
 	rebuild_scratch_helpers()
@@ -313,7 +411,6 @@ rebuild_scratch_helpers :: proc() {
 }
 
 game_draw :: proc() {
-
 	// this is so we can get the current pixel in the shader in world space (VERYYY useful)
 	draw.draw_frame.ndc_to_world_xform = get_world_space_camera() * linalg.inverse(get_world_space_proj())
 	//draw.draw_frame.bg_repeat_tex0_atlas_uv = draw.atlas_uv_from_sprite(.bg_repeat_tex0)
@@ -410,6 +507,8 @@ get_player :: proc() -> ^Entity {
 	return entity_from_handle(ctx.gs.player_handle)
 }
 
+// SETUP
+
 setup_player :: proc(e: ^Entity) {
 	e.kind = .player
 
@@ -418,21 +517,69 @@ setup_player :: proc(e: ^Entity) {
 	e.draw_offset = Vec2{0.5, 5}
 	e.draw_pivot = .bottom_center
 
+	e.max_health = 100
+	e.current_health = e.max_health
+
+	e.vitality = 5
+	e.chance = 5
+	e.lockpick = 5
+	e.hack = 5
+	e.endurance = 5
+	e.mana = 5
+
 	e.update_proc = proc(e: ^Entity) {
 
-		input_dir := get_input_vector()
-		e.pos += input_dir * 100.0 * ctx.delta_t
-
-		if input_dir.x != 0 {
-			e.last_known_x_dir = input_dir.x
+		if e.can_move == false {
+			e.time_to_move -= ctx.delta_t
+			if e.time_to_move <= 0 {
+				e.time_to_move = 0
+				e.can_move = true	
+			}
 		}
+		else {
+			input_dir := get_input_vector()
+			moved : bool = false
+			if input_dir.x != 0 {
+				input_dir.y = 0
+				input_dir.x = input_dir.x > 0 ? 1 : -1
+				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.x)] == false {
+					log.debug(input_dir)
+					e.pos += input_dir * 16.0
+					ctx.gs.player_cell += int(input_dir.x)
+					moved = true
+				}
+				log.debug(ctx.gs.player_cell)
+				log.debug(ctx.gs.all_cells[ctx.gs.player_cell])
+			}
+			else if input_dir.y != 0 {
+				input_dir.x = 0
+				input_dir.y = input_dir.y > 0 ? 1 : -1
+				e.pos += input_dir * 16.0
+				ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
+				moved = true
+				log.debug(ctx.gs.player_cell)
+				log.debug(ctx.gs.all_cells[ctx.gs.player_cell])
+			}
+	
 
-		e.flip_x = e.last_known_x_dir < 0
+			//log.debug(ctx.gs.player_cell / TILE_WIDTH)
 
-		if input_dir == {} {
-			entity_set_animation(e, .player_idle, 0.3)
-		} else {
-			entity_set_animation(e, .player_run, 0.1)
+			if input_dir.x != 0 {
+				e.last_known_x_dir = input_dir.x
+			}
+	
+			e.flip_x = e.last_known_x_dir < 0
+	
+			if input_dir == {} {
+				entity_set_animation(e, .player_idle, 0.3)
+			} else {
+				entity_set_animation(e, .player_run, 0.1)
+				if moved {
+					e.can_move = false
+					e.time_to_move = 0.1
+					move_time()
+				}
+			}
 		}
 
 		e.scratch.col_override = Vec4{0,0,1,0.2}
@@ -577,6 +724,7 @@ entity_set_animation :: proc(e: ^Entity, sprite: Sprite_Name, frame_duration: f3
 		e.next_frame_end_time = 0
 	}
 }
+
 update_entity_animation :: proc(e: ^Entity) {
 	if e.frame_duration == 0 do return
 
@@ -605,5 +753,15 @@ update_entity_animation :: proc(e: ^Entity) {
 
 			}
 		}
+	}
+}
+
+// TIME
+
+move_time :: proc() {
+	ctx.gs.time_minute += 3
+	if ctx.gs.time_minute >= 60 {
+		ctx.gs.time_minute -= 60
+		ctx.gs.time_hour += 1
 	}
 }

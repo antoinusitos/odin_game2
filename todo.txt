@@ -3,10 +3,13 @@ TODO :
 City generation
 Health
 Stamina
-Stats (Lockpick, Hack, Vitality, Endurance, Mana (not really mana but it's for powers))
+Stats (Lockpick, Hack, Vitality, Endurance, Mana (not really mana but it's for powers), Chance)
 Movements
 AI
 Quests
 Time
 Weapons
 Items
+Random on actions
+Story
+inventory
