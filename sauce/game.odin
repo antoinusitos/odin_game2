@@ -66,6 +66,8 @@ Game_State :: struct {
 	// sloppy state dump
 	player_handle: Entity_Handle,
 	player_cell: int,
+	player_cell_x: int,
+	player_cell_y: int,
 
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
 
@@ -550,25 +552,28 @@ setup_player :: proc(e: ^Entity) {
 			if input_dir.x != 0 {
 				input_dir.y = 0
 				input_dir.x = input_dir.x > 0 ? 1 : -1
-				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.x)] == false {
-					e.pos += input_dir * 16.0
-					ctx.gs.player_cell += int(input_dir.x)
-					moved = true
+				if (input_dir.x < 0 && ctx.gs.player_cell_x > 0) || (input_dir.x > 0 && ctx.gs.player_cell_x < TILE_WIDTH - 1) {
+					if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.x)] == false {
+						e.pos += input_dir * 16.0
+						ctx.gs.player_cell += int(input_dir.x)
+						ctx.gs.player_cell_x += int(input_dir.x)
+						moved = true
+					}
 				}
 			}
 			else if input_dir.y != 0 {
 				input_dir.x = 0
 				input_dir.y = input_dir.y > 0 ? 1 : -1
-				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.y) * TILE_WIDTH] == false {
-					e.pos += input_dir * 16.0
-					ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
-					moved = true
+				if (input_dir.y < 0 && ctx.gs.player_cell_y > 0) || (input_dir.y > 0 && ctx.gs.player_cell_y < TILE_HEIGHT - 1) {
+					if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.y) * TILE_WIDTH] == false {
+						e.pos += input_dir * 16.0
+						ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
+						ctx.gs.player_cell_y += int(input_dir.y)
+						moved = true
+					}
 				}
 			}
 	
-
-			//log.debug(ctx.gs.player_cell / TILE_WIDTH)
-
 			if input_dir.x != 0 {
 				e.last_known_x_dir = input_dir.x
 			}
@@ -584,6 +589,21 @@ setup_player :: proc(e: ^Entity) {
 					e.time_to_move = 0.1
 					move_time()
 				}
+			}
+		}
+
+		if is_action_pressed(.interact) {
+			if ctx.gs.player_cell_x > 0 {
+				log.debug("check left")
+			}
+			if ctx.gs.player_cell_x < TILE_WIDTH - 1 {
+				log.debug("check Right")
+			}
+			if ctx.gs.player_cell_y > 0 {
+				log.debug("check botom")
+			}
+			if ctx.gs.player_cell_y < TILE_HEIGHT - 1 {
+				log.debug("check Top")
 			}
 		}
 
