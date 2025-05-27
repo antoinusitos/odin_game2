@@ -23,6 +23,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 import "core:math/linalg"
+import "core:math/rand"
 
 import "core:strings"
 import "core:strconv"
@@ -70,6 +71,7 @@ Game_State :: struct {
 	player_cell_y: int,
 
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
+	all_cells_entity: [TILE_WIDTH * TILE_HEIGHT]^Entity,
 
 	time_hour: int,
 	time_minute: int,
@@ -77,6 +79,8 @@ Game_State :: struct {
 	day: int,
 	month: bald_user.Month,
 	year: int,
+
+	last_actions: [dynamic]string,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -131,6 +135,7 @@ Entity :: struct {
  	next_frame_end_time: f64,
   	loop: bool,
   	frame_duration: f32,
+	name: string,
 
 	can_move: bool,
 	time_to_move: f32,
@@ -240,7 +245,7 @@ game_ui :: proc() {
 	// STATS
 	result = strconv.itoa(buf[:], int(player.vitality))
 	str = string(result)
-	vitality_string : string =  strings.concatenate({"Vitality : ", str})
+	vitality_string : string = strings.concatenate({"Vitality : ", str})
 	draw.draw_text({screen_x + 150, screen_y - 2}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	result = strconv.itoa(buf[:], int(player.chance))
@@ -267,6 +272,19 @@ game_ui :: proc() {
 	str = string(result)
 	mana_string : string =  strings.concatenate({"Mana : ", str})
 	draw.draw_text({screen_x + 750, screen_y - 2}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// ACTIONS
+	screen_x, screen_y = screen_pivot(.bottom_left)
+	action_index := 0
+	for action_it_index := len(ctx.gs.last_actions) - 1; action_it_index >= 0; action_it_index -= 1 {
+		if len(ctx.gs.last_actions) > action_it_index {
+			draw.draw_text({screen_x + 2, screen_y + 15 + f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left)
+			action_index += 1
+			if action_index >= 5 {
+				break
+			}
+		}
+	}
 
 	// DATE
 	screen_x, screen_y = screen_pivot(.top_right)
@@ -312,45 +330,56 @@ game_init :: proc() {
 		if id == 27 {
 			p = entity_create(.tile)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 844 {
 			p = entity_create(.wall)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 894 {
 			p = entity_create(.wall)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 880 {
 			p = entity_create(.dot)
 			ctx.gs.all_cells[i] = false
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 177 {
 			p = entity_create(.tile2)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 450 {
 			p = entity_create(.door)
 			ctx.gs.all_cells[i] = false
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 448 {
 			p = entity_create(.door)
 			ctx.gs.all_cells[i] = false
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 320 {
 			p = entity_create(.tile3)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 224 {
 			p = entity_create(.tile4)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 173 {
 			p = entity_create(.tile5)
 			ctx.gs.all_cells[i] = true
+			ctx.gs.all_cells_entity[i] = p
 		}
 		else {
 			ctx.gs.all_cells[i] = false
+			ctx.gs.all_cells_entity[i] = nil
 		}
 
 		if p != nil {
@@ -594,16 +623,48 @@ setup_player :: proc(e: ^Entity) {
 
 		if is_action_pressed(.interact) {
 			if ctx.gs.player_cell_x > 0 {
-				log.debug("check left")
+				//left
+				cell := check_cell(ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x - 1)
+				if cell != nil{
+					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+				}
 			}
 			if ctx.gs.player_cell_x < TILE_WIDTH - 1 {
-				log.debug("check Right")
+				//right
+				cell := check_cell(ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x + 1)
+				if cell != nil{
+					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+				}
 			}
 			if ctx.gs.player_cell_y > 0 {
-				log.debug("check botom")
+				//bottom
+				cell := check_cell((ctx.gs.player_cell_y - 1) * TILE_WIDTH + ctx.gs.player_cell_x)
+				if cell != nil{
+					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+				}
 			}
 			if ctx.gs.player_cell_y < TILE_HEIGHT - 1 {
-				log.debug("check Top")
+				//top
+				cell := check_cell((ctx.gs.player_cell_y + 1) * TILE_WIDTH + ctx.gs.player_cell_x)
+				if cell != nil{
+					if cell.kind == .door {
+						chance : f32 = f32(e.chance) / 100
+						success :i32 = 50 + i32(chance) * 100
+						random := rand.int31_max(101)
+						log.debug(success)
+						log.debug(random)
+						if success >= random {
+							append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name}))
+							e.lockpick += 1
+						}
+						else {
+							append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name}))
+						}
+					}
+					else {
+						append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+					}
+				}
 			}
 		}
 
@@ -616,6 +677,14 @@ setup_player :: proc(e: ^Entity) {
 	}
 }
 
+check_cell :: proc(index: int) -> ^Entity {
+	if ctx.gs.all_cells_entity[index] != nil && 
+		ctx.gs.all_cells_entity[index].kind != .dot {
+			return ctx.gs.all_cells_entity[index]
+	}
+	return nil
+}
+
 setup_thing1 :: proc(using e: ^Entity) {
 	kind = .thing1
 }
@@ -623,6 +692,7 @@ setup_thing1 :: proc(using e: ^Entity) {
 setup_tile :: proc(using e: ^Entity) {
 	e.kind = .tile
 
+	e.name = "tile"
 	e.sprite = .playertile;
 
 	e.draw_proc = proc(e: Entity) {
@@ -633,6 +703,7 @@ setup_tile :: proc(using e: ^Entity) {
 setup_tile2 :: proc(using e: ^Entity) {
 	e.kind = .tile2
 
+	e.name = "tile2"
 	e.sprite = .playertile2;
 
 	e.draw_proc = proc(e: Entity) {
@@ -643,6 +714,7 @@ setup_tile2 :: proc(using e: ^Entity) {
 setup_tile3 :: proc(using e: ^Entity) {
 	e.kind = .tile3
 
+	e.name = "tile3"
 	e.sprite = .playertile3;
 
 	e.draw_proc = proc(e: Entity) {
@@ -653,6 +725,7 @@ setup_tile3 :: proc(using e: ^Entity) {
 setup_tile4 :: proc(using e: ^Entity) {
 	e.kind = .tile4
 
+	e.name = "tile4"
 	e.sprite = .playertile4;
 
 	e.draw_proc = proc(e: Entity) {
@@ -663,6 +736,7 @@ setup_tile4 :: proc(using e: ^Entity) {
 setup_tile5 :: proc(using e: ^Entity) {
 	e.kind = .tile5
 
+	e.name = "tile5"
 	e.sprite = .playertile5;
 
 	e.draw_proc = proc(e: Entity) {
@@ -673,6 +747,7 @@ setup_tile5 :: proc(using e: ^Entity) {
 setup_tile6 :: proc(using e: ^Entity) {
 	e.kind = .tile6
 
+	e.name = "tile6"
 	e.sprite = .playertile6;
 
 	e.draw_proc = proc(e: Entity) {
@@ -683,6 +758,7 @@ setup_tile6 :: proc(using e: ^Entity) {
 setup_tile7 :: proc(using e: ^Entity) {
 	e.kind = .tile7
 
+	e.name = "tile7"
 	e.sprite = .playertile7;
 
 	e.draw_proc = proc(e: Entity) {
@@ -693,6 +769,7 @@ setup_tile7 :: proc(using e: ^Entity) {
 setup_tile8 :: proc(using e: ^Entity) {
 	e.kind = .tile8
 
+	e.name = "tile8"
 	e.sprite = .playertile8;
 
 	e.draw_proc = proc(e: Entity) {
@@ -703,6 +780,7 @@ setup_tile8 :: proc(using e: ^Entity) {
 setup_tile9 :: proc(using e: ^Entity) {
 	e.kind = .tile9
 
+	e.name = "tile9"
 	e.sprite = .playertile9;
 
 	e.draw_proc = proc(e: Entity) {
@@ -713,6 +791,7 @@ setup_tile9 :: proc(using e: ^Entity) {
 setup_wall :: proc(using e: ^Entity) {
 	e.kind = .wall
 
+	e.name = "wall"
 	e.sprite = .wall;
 
 	e.draw_proc = proc(e: Entity) {
@@ -723,6 +802,7 @@ setup_wall :: proc(using e: ^Entity) {
 setup_dot :: proc(using e: ^Entity) {
 	e.kind = .dot
 
+	e.name = "dot"
 	e.sprite = .dot;
 
 	e.draw_proc = proc(e: Entity) {
@@ -733,6 +813,7 @@ setup_dot :: proc(using e: ^Entity) {
 setup_door :: proc(using e: ^Entity) {
 	e.kind = .door
 
+	e.name = "door"
 	e.sprite = .door;
 
 	e.draw_proc = proc(e: Entity) {
