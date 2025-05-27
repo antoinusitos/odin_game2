@@ -295,8 +295,15 @@ game_init :: proc() {
 
 	map_info := utils.map_from_file("./tiled/sans titre.tmj")
 
+	copied_array : [dynamic]int
+	for copied_y := (TILE_HEIGHT - 1); copied_y >= 0; copied_y -= 1 {
+		for copied_x := 0; copied_x < TILE_WIDTH; copied_x += 1 {
+			append(&copied_array, map_info.layers[0].data[copied_y * TILE_WIDTH + copied_x])
+		}
+	}
+
 	i := 0
-	for id in map_info.layers[0].data {
+	for id in copied_array {
 		p : ^Entity = nil
 		if id == 27 {
 			p = entity_create(.tile)
@@ -548,17 +555,16 @@ setup_player :: proc(e: ^Entity) {
 					ctx.gs.player_cell += int(input_dir.x)
 					moved = true
 				}
-				log.debug(ctx.gs.player_cell)
-				log.debug(ctx.gs.all_cells[ctx.gs.player_cell])
 			}
 			else if input_dir.y != 0 {
 				input_dir.x = 0
 				input_dir.y = input_dir.y > 0 ? 1 : -1
-				e.pos += input_dir * 16.0
-				ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
-				moved = true
-				log.debug(ctx.gs.player_cell)
-				log.debug(ctx.gs.all_cells[ctx.gs.player_cell])
+				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.y) * TILE_WIDTH] == false {
+					log.debug(input_dir)
+					e.pos += input_dir * 16.0
+					ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
+					moved = true
+				}
 			}
 	
 
