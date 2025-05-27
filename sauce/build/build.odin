@@ -103,6 +103,7 @@ main :: proc() {
 			"sauce",
 			"-debug",
 			"-collection:bald=sauce/bald",
+			"-collection:bald-user=sauce/bald-user",
 			"-collection:user=sauce",
 			fmt.tprintf("-out:%v/%v.exe", out_dir, EXE_NAME),
 		}

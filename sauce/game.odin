@@ -16,6 +16,7 @@ import "bald:draw"
 import "bald:sound"
 import "bald:utils"
 import "bald:utils/color"
+import bald_user "bald-user"
 
 import "core:log"
 import "core:fmt"
@@ -37,6 +38,8 @@ TILE_WIDTH :: 80
 TILE_HEIGHT :: 35
 window_w := 1280
 window_h := 720
+map_path := "./tiled/sans titre.tmj"
+starting_y : f32 = 16 * 5
 
 when NOT_RELEASE {
 	// can edit stuff in here to be whatever for testing
@@ -69,6 +72,9 @@ Game_State :: struct {
 	time_hour: int,
 	time_minute: int,
 	tick_to_minute: f64,
+	day: int,
+	month: bald_user.Month,
+	year: int,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -198,81 +204,7 @@ app_frame :: proc() {
 	// "UX" switch for startup splash, main menu, settings, in-game, etc
 
 	{
-		// ui space example
-		draw.push_coord_space(get_screen_space())
-
-		x, y := screen_pivot(.top_left)
-		x += 2
-		y -= 2
-		player := get_player()
-		buf: [4]byte
-		result := strconv.itoa(buf[:], int(player.current_health))
-		str := string(result)
-		hp_string : string =  strings.concatenate({"HP : ", str})
-		draw.draw_text({x, y}, hp_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		//stats
-		x, y = screen_pivot(.top_left)
-		x += 100
-		y -= 2
-		result = strconv.itoa(buf[:], int(player.vitality))
-		str = string(result)
-		vitality_string : string =  strings.concatenate({"Vitality : ", str})
-		draw.draw_text({x, y}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		x, y = screen_pivot(.top_left)
-		x += 200
-		y -= 2
-		result = strconv.itoa(buf[:], int(player.chance))
-		str = string(result)
-		chance_string : string =  strings.concatenate({"Chance : ", str})
-		draw.draw_text({x, y}, chance_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		x, y = screen_pivot(.top_left)
-		x += 300
-		y -= 2
-		result = strconv.itoa(buf[:], int(player.endurance))
-		str = string(result)
-		endurance_string : string =  strings.concatenate({"Endurance : ", str})
-		draw.draw_text({x, y}, endurance_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		x, y = screen_pivot(.top_left)
-		x += 2
-		y -= 20
-		result = strconv.itoa(buf[:], int(player.lockpick))
-		str = string(result)
-		lockpick_string : string =  strings.concatenate({"Lockpick : ", str})
-		draw.draw_text({x, y}, lockpick_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		x, y = screen_pivot(.top_left)
-		x += 100
-		y -= 20
-		result = strconv.itoa(buf[:], int(player.hack))
-		str = string(result)
-		hack_string : string =  strings.concatenate({"Hack : ", str})
-		draw.draw_text({x, y}, hack_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		x, y = screen_pivot(.top_left)
-		x += 200
-		y -= 20
-		result = strconv.itoa(buf[:], int(player.mana))
-		str = string(result)
-		mana_string : string =  strings.concatenate({"Mana : ", str})
-		draw.draw_text({x, y}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
-
-		// TIME
-		x, y = screen_pivot(.top_right)
-		x -= 100
-		y -= 2
-		result = strconv.itoa(buf[:], int(ctx.gs.time_hour))
-		str = string(result)
-		buf2: [4]byte
-		hour_text_single := (ctx.gs.time_hour < 10 ? "0" : "")
-		result_minute := strconv.itoa(buf2[:], int(ctx.gs.time_minute))
-		str2 := string(result_minute)
-		minute_text_single := (ctx.gs.time_minute < 10 ? "0" : "")
-		time_hour_string : string =  strings.concatenate({"Time : ", hour_text_single, str, "h", minute_text_single, str2})
-		draw.draw_text({x, y}, time_hour_string, z_layer=.ui, pivot=Pivot.top_left)
+		game_ui()
 	}
 
 	sound.play_continuously("event:/ambiance", "")
@@ -289,11 +221,81 @@ app_shutdown :: proc() {
 
 }
 
+game_ui :: proc() {
+	// ui space example
+	draw.push_coord_space(get_screen_space())
+
+	screen_x, screen_y := screen_pivot(.top_left)
+
+	// HP
+	player := get_player()
+	buf: [4]byte
+	result := strconv.itoa(buf[:], int(player.current_health))
+	str := string(result)
+	hp_string : string =  strings.concatenate({"HP : ", str})
+	draw.draw_text({screen_x + 2, screen_y - 20}, hp_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// STATS
+	result = strconv.itoa(buf[:], int(player.vitality))
+	str = string(result)
+	vitality_string : string =  strings.concatenate({"Vitality : ", str})
+	draw.draw_text({screen_x + 150, screen_y - 2}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.chance))
+	str = string(result)
+	chance_string : string =  strings.concatenate({"Chance : ", str})
+	draw.draw_text({screen_x + 300, screen_y - 2}, chance_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.endurance))
+	str = string(result)
+	endurance_string : string =  strings.concatenate({"Endurance : ", str})
+	draw.draw_text({screen_x + 450, screen_y - 2}, endurance_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.lockpick))
+	str = string(result)
+	lockpick_string : string =  strings.concatenate({"Lockpick : ", str})
+	draw.draw_text({screen_x + 2, screen_y - 2}, lockpick_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.hack))
+	str = string(result)
+	hack_string : string =  strings.concatenate({"Hack : ", str})
+	draw.draw_text({screen_x + 600, screen_y - 2}, hack_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.mana))
+	str = string(result)
+	mana_string : string =  strings.concatenate({"Mana : ", str})
+	draw.draw_text({screen_x + 750, screen_y - 2}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// DATE
+	screen_x, screen_y = screen_pivot(.top_right)
+	result_day := strconv.itoa(buf[:], int(ctx.gs.day))
+	str = string(result_day)
+	buf2: [4]byte
+	result_year := strconv.itoa(buf2[:], int(ctx.gs.year))
+	str2 := string(result_year)
+	date_string : string =  strings.concatenate({str, " ", bald_user.month_to_string(ctx.gs.month), " ", str2})
+	draw.draw_text({screen_x - 220, screen_y - 2}, date_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// TIME
+	result_hour := strconv.itoa(buf[:], int(ctx.gs.time_hour))
+	str = string(result_hour)
+	hour_text_single := (ctx.gs.time_hour < 10 ? "0" : "")
+	result_minute := strconv.itoa(buf2[:], int(ctx.gs.time_minute))
+	str2 = string(result_minute)
+	minute_text_single := (ctx.gs.time_minute < 10 ? "0" : "")
+	time_hour_string := strings.concatenate({"Time : ", hour_text_single, str, "h", minute_text_single, str2})
+	draw.draw_text({screen_x - 100, screen_y - 2}, time_hour_string, z_layer=.ui, pivot=Pivot.top_left)
+}
+
 game_init :: proc() {
 	ctx.gs.time_hour = 9
 	ctx.gs.time_minute = 0
 
-	map_info := utils.map_from_file("./tiled/sans titre.tmj")
+	ctx.gs.day = 14
+	ctx.gs.month = bald_user.Month.April
+	ctx.gs.year = 2067
+
+	map_info := utils.map_from_file(map_path)
 
 	copied_array : [dynamic]int
 	for copied_y := (TILE_HEIGHT - 1); copied_y >= 0; copied_y -= 1 {
@@ -312,7 +314,6 @@ game_init :: proc() {
 		else if id == 844 {
 			p = entity_create(.wall)
 			ctx.gs.all_cells[i] = true
-			log.debug(i, "is true")
 		}
 		else if id == 894 {
 			p = entity_create(.wall)
@@ -352,9 +353,8 @@ game_init :: proc() {
 
 		if p != nil {
 			x := i % TILE_WIDTH
-			//y := TILE_HEIGHT - ((i - x) / TILE_WIDTH) - 1
 			y := (i - x) / TILE_WIDTH
-			p.pos = Vec2{f32(x * 16), f32(y * 16)}
+			p.pos = Vec2{f32(x * 16), starting_y + f32(y * 16)}
 		}
 
 		i += 1
@@ -362,6 +362,7 @@ game_init :: proc() {
 
 	player := entity_create(.player)
 	ctx.gs.player_handle = player.handle
+	player.pos = Vec2{0, starting_y}
 }
 
 game_update :: proc() {
@@ -550,7 +551,6 @@ setup_player :: proc(e: ^Entity) {
 				input_dir.y = 0
 				input_dir.x = input_dir.x > 0 ? 1 : -1
 				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.x)] == false {
-					log.debug(input_dir)
 					e.pos += input_dir * 16.0
 					ctx.gs.player_cell += int(input_dir.x)
 					moved = true
@@ -560,7 +560,6 @@ setup_player :: proc(e: ^Entity) {
 				input_dir.x = 0
 				input_dir.y = input_dir.y > 0 ? 1 : -1
 				if ctx.gs.all_cells[ctx.gs.player_cell + int(input_dir.y) * TILE_WIDTH] == false {
-					log.debug(input_dir)
 					e.pos += input_dir * 16.0
 					ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
 					moved = true
@@ -769,5 +768,9 @@ move_time :: proc() {
 	if ctx.gs.time_minute >= 60 {
 		ctx.gs.time_minute -= 60
 		ctx.gs.time_hour += 1
+		if ctx.gs.time_hour > 23 {
+			ctx.gs.time_hour = 0
+			ctx.gs.day += 1
+		}
 	}
 }

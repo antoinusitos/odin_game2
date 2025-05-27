@@ -122,6 +122,53 @@ get_frame_count :: proc(sprite: Sprite_Name) -> int {
 	return frame_count
 }
 
+//
+// data
+
+Month :: enum u8 {
+	January,
+	Febuary,
+	March,
+	April,
+	May,
+	June,
+	July,
+	August,
+	September,
+	October,
+	November,
+	December
+}
+
+month_to_string :: proc(input : Month) -> string {
+	switch input {
+		case .January :
+			return "January"
+		case .Febuary :
+			return "Febuary"
+		case .March :
+			return "March"
+		case .April :
+			return "April"
+		case .May :
+			return "May"
+		case .June :
+			return "June"
+		case .July :
+			return "July"
+		case .August :
+			return "August"
+		case .September :
+			return "September"
+		case .October :
+			return "October"
+		case .November :
+			return "November"
+		case .December :
+			return "December"
+	}
+	return ""
+}
 
 //
 // helpers
