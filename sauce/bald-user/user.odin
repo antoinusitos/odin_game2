@@ -94,6 +94,7 @@ Sprite_Name :: enum {
 	dot,
 	door,
 	door_closed,
+	stairs_up,
 }
 
 sprite_data: [Sprite_Name]Sprite_Data = #partial {

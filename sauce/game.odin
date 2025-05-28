@@ -35,11 +35,11 @@ VERSION :string: "v0.0.0"
 WINDOW_TITLE :: "pixel detective"
 GAME_RES_WIDTH :: 1280//480
 GAME_RES_HEIGHT :: 720//270
-TILE_WIDTH :: 80
+TILE_WIDTH :: 65
 TILE_HEIGHT :: 35
 window_w := 1280
 window_h := 720
-map_path := "./tiled/sans titre.tmj"
+map_path := "./tiled/map0.tmj"
 starting_y : f32 = 16 * 5
 
 when NOT_RELEASE {
@@ -65,14 +65,18 @@ Game_State :: struct {
 	entity_free_list: [dynamic]int,
 
 	// sloppy state dump
+
+	// player
 	player_handle: Entity_Handle,
 	player_cell: int,
 	player_cell_x: int,
 	player_cell_y: int,
 
+	// world
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
 	all_cells_entity: [TILE_WIDTH * TILE_HEIGHT]^Entity,
 
+	// time
 	time_hour: int,
 	time_minute: int,
 	tick_to_minute: f64,
@@ -80,6 +84,11 @@ Game_State :: struct {
 	month: bald_user.Month,
 	year: int,
 
+	// location
+	current_district: string,
+	current_block: string,
+
+	// actions
 	last_actions: [dynamic]string,
 
 	scratch: struct {
@@ -176,6 +185,7 @@ Entity_Kind :: enum {
 	wall,
 	dot,
 	door,
+	stairs_up,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -199,6 +209,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .wall: setup_wall(e)
 		case .dot: setup_dot(e)
 		case .door: setup_door(e)
+		case .stairs_up: setup_stairs_up(e)
 	}
 }
 
@@ -277,13 +288,13 @@ game_ui :: proc() {
 	draw.draw_text({screen_x + 750, screen_y - 2}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	// ACTIONS
-	screen_x, screen_y = screen_pivot(.bottom_left)
+	screen_x, screen_y = screen_pivot(.top_right)
 	action_index := 0
 	for action_it_index := len(ctx.gs.last_actions) - 1; action_it_index >= 0; action_it_index -= 1 {
 		if len(ctx.gs.last_actions) > action_it_index {
-			draw.draw_text({screen_x + 2, screen_y + 15 + f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left)
+			draw.draw_text({screen_x - 240, screen_y - 80 - f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left)
 			action_index += 1
-			if action_index >= 5 {
+			if action_index >= 37 {
 				break
 			}
 		}
@@ -308,6 +319,10 @@ game_ui :: proc() {
 	minute_text_single := (ctx.gs.time_minute < 10 ? "0" : "")
 	time_hour_string := strings.concatenate({"Time : ", hour_text_single, str, "h", minute_text_single, str2})
 	draw.draw_text({screen_x - 100, screen_y - 2}, time_hour_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// LOCATION
+	location_string : string =  strings.concatenate({ctx.gs.current_district, " - ", ctx.gs.current_block})
+	draw.draw_text({screen_x - 220, screen_y - 20}, location_string, z_layer=.ui, pivot=Pivot.top_left)
 }
 
 game_init :: proc() {
@@ -317,6 +332,13 @@ game_init :: proc() {
 	ctx.gs.day = 14
 	ctx.gs.month = bald_user.Month.April
 	ctx.gs.year = 2067
+
+	ctx.gs.current_district = "District 1"
+	ctx.gs.current_block = "Block NW"
+
+	ctx.gs.player_cell_x = 1
+	ctx.gs.player_cell_y = 1
+	ctx.gs.player_cell = ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x
 
 	map_info := utils.map_from_file(map_path)
 
@@ -389,6 +411,10 @@ game_init :: proc() {
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
 		}
+		else if id == 297 {
+			p = entity_create(.stairs_up)
+			ctx.gs.all_cells_entity[i] = p
+		}
 		else {
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = nil
@@ -405,7 +431,7 @@ game_init :: proc() {
 
 	player := entity_create(.player)
 	ctx.gs.player_handle = player.handle
-	player.pos = Vec2{0, starting_y}
+	player.pos = Vec2{16, starting_y + 16}
 }
 
 game_update :: proc() {
@@ -636,49 +662,34 @@ setup_player :: proc(e: ^Entity) {
 		if is_action_pressed(.interact) {
 			if ctx.gs.player_cell_x > 0 {
 				//left
-				cell := check_cell(ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x - 1)
+				index := ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x - 1
+				cell := check_cell(index)
 				if cell != nil{
-					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+					interact_with_cell(e, cell, index)
 				}
 			}
 			if ctx.gs.player_cell_x < TILE_WIDTH - 1 {
 				//right
-				cell := check_cell(ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x + 1)
+				index := ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x + 1
+				cell := check_cell(index)
 				if cell != nil{
-					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+					interact_with_cell(e, cell, index)
 				}
 			}
 			if ctx.gs.player_cell_y > 0 {
 				//bottom
-				cell := check_cell((ctx.gs.player_cell_y - 1) * TILE_WIDTH + ctx.gs.player_cell_x)
+				index := (ctx.gs.player_cell_y - 1) * TILE_WIDTH + ctx.gs.player_cell_x
+				cell := check_cell(index)
 				if cell != nil{
-					append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+					interact_with_cell(e, cell, index)
 				}
 			}
 			if ctx.gs.player_cell_y < TILE_HEIGHT - 1 {
 				//top
-				cell := check_cell((ctx.gs.player_cell_y + 1) * TILE_WIDTH + ctx.gs.player_cell_x)
+				index := (ctx.gs.player_cell_y + 1) * TILE_WIDTH + ctx.gs.player_cell_x
+				cell := check_cell(index)
 				if cell != nil{
-					if cell.kind == .door {
-						chance : f32 = f32(e.chance) / 100
-						success :i32 = 50 + i32(chance) * 100
-						random := rand.int31_max(101)
-						log.debug(success)
-						log.debug(random)
-						if success >= random {
-							append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name}))
-							cell.door_state = bald_user.Door_State.Open
-							cell.sprite = .door
-							e.lockpick += 1
-							ctx.gs.all_cells[(ctx.gs.player_cell_y + 1) * TILE_WIDTH + ctx.gs.player_cell_x] = false
-						}
-						else {
-							append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name}))
-						}
-					}
-					else {
-						append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
-					}
+					interact_with_cell(e, cell, index)
 				}
 			}
 		}
@@ -689,6 +700,29 @@ setup_player :: proc(e: ^Entity) {
 	e.draw_proc = proc(e: Entity) {
 		draw.draw_sprite(e.pos, .shadow_medium, col={1,1,1,0.2})
 		draw_entity_default(e)
+	}
+}
+
+interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
+	if cell.kind == .door && cell.door_state == bald_user.Door_State.Locked {
+		chance : f32 = f32(e.chance) / 100
+		success :i32 = 50 + i32(chance) * 100
+		random := rand.int31_max(101)
+		log.debug(success)
+		log.debug(random)
+		if success >= random {
+			append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name}))
+			cell.door_state = bald_user.Door_State.Open
+			cell.sprite = .door
+			e.lockpick += 1
+			ctx.gs.all_cells[index] = false
+		}
+		else {
+			append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name}))
+		}
+	}
+	else {
+		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
 	}
 }
 
@@ -830,6 +864,17 @@ setup_door :: proc(using e: ^Entity) {
 
 	e.name = "door"
 	e.sprite = .door;
+
+	e.draw_proc = proc(e: Entity) {
+		draw_entity_default(e)
+	}
+}
+
+setup_stairs_up :: proc(using e: ^Entity) {
+	e.kind = .stairs_up
+
+	e.name = "stairs_up"
+	e.sprite = .stairs_up;
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
