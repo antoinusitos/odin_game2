@@ -91,6 +91,7 @@ Game_State :: struct {
 	// actions
 	last_actions: [dynamic]string,
 	current_lockpick: ^Entity,
+	current_weapon: ^Entity,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -173,6 +174,10 @@ Entity :: struct {
 	// inventory
 	inventory: [dynamic]^Entity,
 
+	// item
+	value_min: int,
+	value_max: int,
+
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
 		col_override: Vec4,
@@ -199,6 +204,7 @@ Entity_Kind :: enum {
 
 	//items
 	lockpick,
+	baton,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -224,6 +230,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .door: setup_door(e)
 		case .stairs_up: setup_stairs_up(e)
 		case .lockpick: setup_lockpick(e)
+		case .baton: setup_baton(e)
 	}
 }
 
@@ -366,7 +373,7 @@ game_init :: proc() {
 	i := 0
 	for id in copied_array {
 		p : ^Entity = nil
-		if id == 27 {
+		if id == 25 {
 			p = entity_create(.tile)
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
@@ -447,9 +454,14 @@ game_init :: proc() {
 	ctx.gs.player_handle = player.handle
 	player.pos = Vec2{16, starting_y + 16}
 
+	// init items
 	lockpick := entity_create(.lockpick)
 	ctx.gs.current_lockpick = lockpick
 	append(&player.inventory, lockpick)
+
+	baton := entity_create(.baton)
+	ctx.gs.current_weapon = baton
+	append(&player.inventory, baton)
 }
 
 game_update :: proc() {
@@ -750,19 +762,30 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			}
 			else {
 				append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name, " (", bald_user.door_level_to_string(cell.door_level), ")"}))
-				if ctx.gs.current_lockpick != nil{
+				if ctx.gs.current_lockpick != nil {
 					ctx.gs.current_lockpick.current_health -= 20
 					buf: [4]byte
 					result := strconv.itoa(buf[:], int(ctx.gs.current_lockpick.current_health))
 					str := string(result)
 					append(&ctx.gs.last_actions, strings.concatenate({"lockpick health is ", str}))
-					if ctx.gs.current_lockpick.current_health <= 0{
+					if ctx.gs.current_lockpick.current_health <= 0 {
 						append(&ctx.gs.last_actions, strings.concatenate({"lockpick broke"}))
 						ctx.gs.current_lockpick = nil
 					}
 				}
 			}
 		}
+	}
+	else if cell.kind == .tile {
+		log.debug("lol")
+		random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
+		log.debug(random)
+		chance : f32 = f32(e.chance) / 100
+		log.debug(chance)
+		max : f32 = f32(0.33) + chance * f32(0.66)
+		log.debug(max)
+		rest := (100 - max * 100) / 2
+		log.debug(rest)
 	}
 	else {
 		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
@@ -787,6 +810,7 @@ setup_tile :: proc(using e: ^Entity) {
 
 	e.name = "tile"
 	e.sprite = .playertile;
+	e.can_be_interact_with = true
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
@@ -940,6 +964,17 @@ setup_lockpick :: proc(using e: ^Entity) {
 	e.max_health = 100
 	e.current_health = e.max_health
 }
+
+setup_baton :: proc(using e: ^Entity) {
+	e.kind = .baton
+
+	e.name = "baton"
+	e.value_min = 1
+	e.value_max = 3
+}
+
+//
+// animation
 
 entity_set_animation :: proc(e: ^Entity, sprite: Sprite_Name, frame_duration: f32, looping:=true) {
 	if e.sprite != sprite {
