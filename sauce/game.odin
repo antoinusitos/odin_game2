@@ -729,7 +729,10 @@ setup_player :: proc(e: ^Entity) {
 
 interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 	if cell.kind == .door && cell.door_state == bald_user.Door_State.Locked {
-		log.debug(bald_user.door_level_to_string(cell.door_level))
+		if e.lockpick < int(cell.door_level) * 25 {
+			append(&ctx.gs.last_actions, strings.concatenate({"not enough skill (", bald_user.door_level_to_string(cell.door_level), ")"}))
+			return
+		} 
 		if ctx.gs.current_lockpick == nil {
 			append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is locked (", bald_user.door_level_to_string(cell.door_level), ")"}))
 			append(&ctx.gs.last_actions, strings.concatenate({"you don't have any lockpick"}))
