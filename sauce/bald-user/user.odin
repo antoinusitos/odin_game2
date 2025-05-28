@@ -180,6 +180,28 @@ Door_State :: enum u8 {
 	Locked,
 }
 
+Door_Level :: enum u8 {
+	Very_Easy,
+	Easy,
+	Hard,
+	Very_Hard,
+}
+
+door_level_to_string :: proc(input : Door_Level) -> string {
+	switch input {
+		case .Very_Easy :
+			return "Very Easy"
+		case .Easy :
+			return "Easy"
+		case .Hard :
+			return "Hard"
+		case .Very_Hard :
+			return "Very Hard"
+	}
+	return ""
+}
+
+
 //
 // helpers
 

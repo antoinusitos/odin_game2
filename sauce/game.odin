@@ -90,6 +90,7 @@ Game_State :: struct {
 
 	// actions
 	last_actions: [dynamic]string,
+	current_lockpick: ^Entity,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -154,6 +155,12 @@ Entity :: struct {
 
 	// door
 	door_state: bald_user.Door_State,
+	door_level: bald_user.Door_Level,
+
+	// tile
+	special_tile: bool,
+	on_trigger_tile: bool,
+	can_be_interact_with: bool,
 
 	// stats
 	vitality: int,
@@ -163,6 +170,9 @@ Entity :: struct {
 	endurance: int,
 	mana: int,
 	
+	// inventory
+	inventory: [dynamic]^Entity,
+
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
 		col_override: Vec4,
@@ -186,6 +196,9 @@ Entity_Kind :: enum {
 	dot,
 	door,
 	stairs_up,
+
+	//items
+	lockpick,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -210,6 +223,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .dot: setup_dot(e)
 		case .door: setup_door(e)
 		case .stairs_up: setup_stairs_up(e)
+		case .lockpick: setup_lockpick(e)
 	}
 }
 
@@ -432,6 +446,10 @@ game_init :: proc() {
 	player := entity_create(.player)
 	ctx.gs.player_handle = player.handle
 	player.pos = Vec2{16, starting_y + 16}
+
+	lockpick := entity_create(.lockpick)
+	ctx.gs.current_lockpick = lockpick
+	append(&player.inventory, lockpick)
 }
 
 game_update :: proc() {
@@ -625,6 +643,9 @@ setup_player :: proc(e: ^Entity) {
 						ctx.gs.player_cell += int(input_dir.x)
 						ctx.gs.player_cell_x += int(input_dir.x)
 						moved = true
+						if ctx.gs.all_cells_entity[ctx.gs.player_cell].on_trigger_tile == true {
+							// to do : change floor 
+						}
 					}
 				}
 			}
@@ -637,6 +658,9 @@ setup_player :: proc(e: ^Entity) {
 						ctx.gs.player_cell += int(input_dir.y) * TILE_WIDTH
 						ctx.gs.player_cell_y += int(input_dir.y)
 						moved = true
+						if ctx.gs.all_cells_entity[ctx.gs.player_cell].on_trigger_tile == true {
+							log.debug("lol")
+						}
 					}
 				}
 			}
@@ -705,20 +729,36 @@ setup_player :: proc(e: ^Entity) {
 
 interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 	if cell.kind == .door && cell.door_state == bald_user.Door_State.Locked {
-		chance : f32 = f32(e.chance) / 100
-		success :i32 = 50 + i32(chance) * 100
-		random := rand.int31_max(101)
-		log.debug(success)
-		log.debug(random)
-		if success >= random {
-			append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name}))
-			cell.door_state = bald_user.Door_State.Open
-			cell.sprite = .door
-			e.lockpick += 1
-			ctx.gs.all_cells[index] = false
+		log.debug(bald_user.door_level_to_string(cell.door_level))
+		if ctx.gs.current_lockpick == nil {
+			append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is locked (", bald_user.door_level_to_string(cell.door_level), ")"}))
+			append(&ctx.gs.last_actions, strings.concatenate({"you don't have any lockpick"}))
 		}
 		else {
-			append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name}))
+			chance : f32 = f32(e.chance) / 100
+			success :i32 = 50 + i32(chance) * 100
+			random := rand.int31_max(101)
+			if success >= random {
+				append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name, " (", bald_user.door_level_to_string(cell.door_level), ")"}))
+				cell.door_state = bald_user.Door_State.Open
+				cell.sprite = .door
+				e.lockpick += 1
+				ctx.gs.all_cells[index] = false
+			}
+			else {
+				append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name, " (", bald_user.door_level_to_string(cell.door_level), ")"}))
+				if ctx.gs.current_lockpick != nil{
+					ctx.gs.current_lockpick.current_health -= 20
+					buf: [4]byte
+					result := strconv.itoa(buf[:], int(ctx.gs.current_lockpick.current_health))
+					str := string(result)
+					append(&ctx.gs.last_actions, strings.concatenate({"lockpick health is ", str}))
+					if ctx.gs.current_lockpick.current_health <= 0{
+						append(&ctx.gs.last_actions, strings.concatenate({"lockpick broke"}))
+						ctx.gs.current_lockpick = nil
+					}
+				}
+			}
 		}
 	}
 	else {
@@ -728,7 +768,8 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 
 check_cell :: proc(index: int) -> ^Entity {
 	if ctx.gs.all_cells_entity[index] != nil && 
-		ctx.gs.all_cells_entity[index].kind != .dot {
+		ctx.gs.all_cells_entity[index].kind != .dot &&
+		ctx.gs.all_cells_entity[index].can_be_interact_with == true {
 			return ctx.gs.all_cells_entity[index]
 	}
 	return nil
@@ -864,6 +905,9 @@ setup_door :: proc(using e: ^Entity) {
 
 	e.name = "door"
 	e.sprite = .door;
+	e.can_be_interact_with = true
+	random := rand.int31_max(4)
+	e.door_level = bald_user.Door_Level(random)
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
@@ -874,11 +918,24 @@ setup_stairs_up :: proc(using e: ^Entity) {
 	e.kind = .stairs_up
 
 	e.name = "stairs_up"
-	e.sprite = .stairs_up;
+	e.sprite = .stairs_up
+	e.special_tile = true
+	e.on_trigger_tile = true
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
 	}
+}
+
+//
+// items
+
+setup_lockpick :: proc(using e: ^Entity) {
+	e.kind = .lockpick
+
+	e.name = "lockpick"
+	e.max_health = 100
+	e.current_health = e.max_health
 }
 
 entity_set_animation :: proc(e: ^Entity, sprite: Sprite_Name, frame_duration: f32, looping:=true) {
