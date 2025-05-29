@@ -3,26 +3,46 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "sans titre.tmj",
+    "activeFile": "map0.tmj",
     "expandedProjectPaths": [
         "."
     ],
     "file.lastUsedOpenFilter": "Tous les Fichiers (*)",
     "fileStates": {
+        "C:/dev/HotSauceV1/tiled/colored-transparent_packed.tsx": {
+            "scaleInDock": 1
+        },
         "colored-transparent_packed.tsx": {
             "scaleInDock": 1.5,
             "scaleInEditor": 2
+        },
+        "map0.tmj": {
+            "scale": 0.75,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 488,
+                "y": 507.33333333333326
+            }
+        },
+        "map0_floor0.tmj": {
+            "scale": 0.2776923076923077,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 817.4515235457064,
+                "y": 790.443213296399
+            }
         },
         "sans titre.tmj": {
             "scale": 1,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 504.5,
-                "y": 375
+                "x": 588,
+                "y": 517.5
             }
         }
     },
     "last.exportedFilePath": "D:/Dev/Odin/Projects/HotSauceV1/tiled",
+    "last.externalTilesetPath": "C:/dev/odin_game2/tiled",
     "last.imagePath": "C:/Users/thebo/Downloads/kenney_1-bit-pack/Tilesheet",
     "map.height": 45,
     "map.lastUsedExportFilter": "Fichiers de carte JSON (*.tmj *.json)",
@@ -32,13 +52,16 @@
     "map.tileWidth": 16,
     "map.width": 80,
     "openFiles": [
-        "colored-transparent_packed.tsx",
-        "sans titre.tmj"
+        "sans titre.tmj",
+        "map0_floor0.tmj",
+        "map0.tmj"
     ],
     "project": "sans titre.tiled-project",
     "recentFiles": [
-        "colored-transparent_packed.tsx",
-        "sans titre.tmj"
+        "sans titre.tmj",
+        "map0_floor0.tmj",
+        "map0.tmj",
+        "colored-transparent_packed.tsx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {
