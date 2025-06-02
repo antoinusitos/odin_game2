@@ -42,7 +42,7 @@ window_h := 720
 map_path := "./tiled/map0.tmj"
 starting_y : f32 = 16 * 5
 
-game_state_name := Game_State_Name.main_menu
+game_state_name := Game_State_Name.game
 
 DEBUG_HINTS := false
 
@@ -426,6 +426,7 @@ game_ui :: proc() {
 
 	// CONSOLE
 	if CONSOLE_COMMAND {
+		screen_x, screen_y = screen_pivot(.bottom_left)
 		xform := Matrix4(1)
 		xform *= utils.xform_translate(Vec2({0, 0}))
 			
@@ -623,8 +624,7 @@ init_hints :: proc() {
 	append(&ctx.gs.hints, hint)
 }
 
-main_menu_update :: proc()
-{
+main_menu_update :: proc(){
 	ctx.gs.scratch = {} // auto-zero scratch for each update
 
 	// this'll be using the last frame's camera position, but it's fine for most things
@@ -698,6 +698,9 @@ game_update :: proc() {
 			analyse_command(CONSOLE_TEXT)
 			CONSOLE_COMMAND = false
 			CONSOLE_TEXT = ""
+		}
+		else if input.key_pressed(.BACKSPACE) {
+			CONSOLE_TEXT = strings.cut(CONSOLE_TEXT, 0, len(CONSOLE_TEXT) - 1)
 		}
 		else {
 			the_key := input.any_key_pressed()
@@ -1293,44 +1296,61 @@ move_time :: proc() {
 
 analyse_command :: proc(command: string) {
 	ss := strings.split(command, " ")
-	log.debug("split:", ss)
 	if ss[0] == "set" {
-		if len (ss) < 3 {
+		if ss[1] == "pos" && len (ss) < 6 {
+			if ss[4] == "0" { // PLAYER
+				x, ok := strconv.parse_int(ss[2])
+				y, ok2 := strconv.parse_int(ss[3])
+
+				ctx.gs.player_cell_x = x
+				ctx.gs.player_cell_y = y
+				ctx.gs.player_cell = ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x
+
+				get_player().pos = Vec2({f32(x) * 16, starting_y + f32(y) * 16})
+			}
 			log.info("unknonw command :", command)
-			return
 		}
-		if ss[3] == "0" { // PLAYER
-			if ss[1] == "int" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().intelligence = n
+		else {
+			if len (ss) < 3 {
+				log.info("unknonw command :", command)
+				return
 			}
-			else if ss[1] == "vit" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().vitality = n
-			}
-			else if ss[1] == "chan" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().chance = n
-			}
-			else if ss[1] == "lock" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().lockpick = n
-			}
-			else if ss[1] == "hack" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().hack = n
-			}
-			else if ss[1] == "end" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().endurance = n
-			}
-			else if ss[1] == "pow" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().power = n
-			}
-			else if ss[1] == "char" {
-				n, ok := strconv.parse_int(ss[2])
-				get_player().charisma = n
+			if ss[3] == "0" { // PLAYER
+				if ss[1] == "int" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().intelligence = n
+				}
+				else if ss[1] == "vit" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().vitality = n
+				}
+				else if ss[1] == "chan" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().chance = n
+				}
+				else if ss[1] == "lock" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().lockpick = n
+				}
+				else if ss[1] == "hack" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().hack = n
+				}
+				else if ss[1] == "end" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().endurance = n
+				}
+				else if ss[1] == "pow" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().power = n
+				}
+				else if ss[1] == "char" {
+					n, ok := strconv.parse_int(ss[2])
+					get_player().charisma = n
+				}
+				else {
+					log.info("unknonw command :", command)
+				}
 			}
 		}
 	}
