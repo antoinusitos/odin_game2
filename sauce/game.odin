@@ -64,6 +64,10 @@ Game_State :: struct {
 	entities: [MAX_ENTITIES]Entity,
 	entity_free_list: [dynamic]int,
 
+	// hints
+	hints: [dynamic]bald_user.hint_ui,
+	hint_text: string,
+
 	// sloppy state dump
 
 	// player
@@ -169,7 +173,13 @@ Entity :: struct {
 	lockpick: int,
 	hack: int,
 	endurance: int,
-	mana: int,
+	power: int,
+	charisma: int,
+	intelligence: int,
+
+	// damage
+	damage_low: int,
+	damage_high: int,
 	
 	// inventory
 	inventory: [dynamic]^Entity,
@@ -277,36 +287,55 @@ game_ui :: proc() {
 	hp_string : string =  strings.concatenate({"HP : ", str})
 	draw.draw_text({screen_x + 2, screen_y - 20}, hp_string, z_layer=.ui, pivot=Pivot.top_left)
 
+	result = strconv.itoa(buf[:], int(player.damage_low))
+	str = string(result)
+	buf_high: [4]byte
+	result_high := strconv.itoa(buf_high[:], int(player.damage_high))
+	str_high := string(result_high)
+	dmg_string : string =  strings.concatenate({"dmg : ", str, " - ", str_high})
+	draw.draw_text({screen_x + 100, screen_y - 20}, dmg_string, z_layer=.ui, pivot=Pivot.top_left)
+
+
 	// STATS
 	result = strconv.itoa(buf[:], int(player.vitality))
 	str = string(result)
-	vitality_string : string = strings.concatenate({"Vitality : ", str})
-	draw.draw_text({screen_x + 150, screen_y - 2}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
+	vitality_string : string = strings.concatenate({"Vit : ", str})
+	draw.draw_text({screen_x + 100, screen_y - 2}, vitality_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	result = strconv.itoa(buf[:], int(player.chance))
 	str = string(result)
-	chance_string : string =  strings.concatenate({"Chance : ", str})
-	draw.draw_text({screen_x + 300, screen_y - 2}, chance_string, z_layer=.ui, pivot=Pivot.top_left)
+	chance_string : string =  strings.concatenate({"Chan : ", str})
+	draw.draw_text({screen_x + 200, screen_y - 2}, chance_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	result = strconv.itoa(buf[:], int(player.endurance))
 	str = string(result)
-	endurance_string : string =  strings.concatenate({"Endurance : ", str})
-	draw.draw_text({screen_x + 450, screen_y - 2}, endurance_string, z_layer=.ui, pivot=Pivot.top_left)
+	endurance_string : string =  strings.concatenate({"End : ", str})
+	draw.draw_text({screen_x + 300, screen_y - 2}, endurance_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	result = strconv.itoa(buf[:], int(player.lockpick))
 	str = string(result)
-	lockpick_string : string =  strings.concatenate({"Lockpick : ", str})
+	lockpick_string : string =  strings.concatenate({"Lock : ", str})
 	draw.draw_text({screen_x + 2, screen_y - 2}, lockpick_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	result = strconv.itoa(buf[:], int(player.hack))
 	str = string(result)
 	hack_string : string =  strings.concatenate({"Hack : ", str})
-	draw.draw_text({screen_x + 600, screen_y - 2}, hack_string, z_layer=.ui, pivot=Pivot.top_left)
+	draw.draw_text({screen_x + 400, screen_y - 2}, hack_string, z_layer=.ui, pivot=Pivot.top_left)
 
-	result = strconv.itoa(buf[:], int(player.mana))
+	result = strconv.itoa(buf[:], int(player.power))
 	str = string(result)
-	mana_string : string =  strings.concatenate({"Mana : ", str})
-	draw.draw_text({screen_x + 750, screen_y - 2}, mana_string, z_layer=.ui, pivot=Pivot.top_left)
+	power_string : string =  strings.concatenate({"Pow : ", str})
+	draw.draw_text({screen_x + 500, screen_y - 2}, power_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.charisma))
+	str = string(result)
+	charisma_string : string =  strings.concatenate({"Char : ", str})
+	draw.draw_text({screen_x + 600, screen_y - 2}, charisma_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	result = strconv.itoa(buf[:], int(player.intelligence))
+	str = string(result)
+	intelligence_string : string =  strings.concatenate({"Int : ", str})
+	draw.draw_text({screen_x + 700, screen_y - 2}, intelligence_string, z_layer=.ui, pivot=Pivot.top_left)
 
 	// ACTIONS
 	screen_x, screen_y = screen_pivot(.top_right)
@@ -344,9 +373,16 @@ game_ui :: proc() {
 	// LOCATION
 	location_string : string =  strings.concatenate({ctx.gs.current_district, " - ", ctx.gs.current_block})
 	draw.draw_text({screen_x - 220, screen_y - 20}, location_string, z_layer=.ui, pivot=Pivot.top_left)
+
+	// HINT
+	screen_x, screen_y = screen_pivot(.top_left)
+	//draw.draw_text(mouse_pos_in_current_space() - Vec2({0, 20}), ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
+	draw.draw_text({screen_x + 2, screen_y - 50}, ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
 }
 
 game_init :: proc() {
+	utils.load_player_prefs()
+
 	ctx.gs.time_hour = 9
 	ctx.gs.time_minute = 0
 
@@ -462,6 +498,67 @@ game_init :: proc() {
 	baton := entity_create(.baton)
 	ctx.gs.current_weapon = baton
 	append(&player.inventory, baton)
+
+	// hints
+	hint := bald_user.hint_ui({})
+	hint.pos = Vec2({0, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Lockpick"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({90, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Vitality"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({190, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Chance"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({290, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Endurance"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({390, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Hack"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({490, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Power"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({590, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Charisma"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({690, f32(window_h)})
+	hint.size = Vec2({50, 15})
+	hint.text = "Intelligence"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({0, f32(window_h) - 20})
+	hint.size = Vec2({50, 15})
+	hint.text = "Health Points"
+	append(&ctx.gs.hints, hint)
+
+	hint = bald_user.hint_ui({})
+	hint.pos = Vec2({90, f32(window_h) - 20})
+	hint.size = Vec2({50, 15})
+	hint.text = "Damage"
+	append(&ctx.gs.hints, hint)
 }
 
 game_update :: proc() {
@@ -502,6 +599,15 @@ game_update :: proc() {
 	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
+
+	ctx.gs.hint_text = ""
+	for hint in ctx.gs.hints {
+		pos := mouse_pos_in_current_space()
+		if pos.x >= hint.pos.x && pos.x <= hint.pos.x + hint.size.x &&
+			pos.y <= hint.pos.y && pos.y >= hint.pos.y - hint.size.y {
+			ctx.gs.hint_text = hint.text
+		}
+	}
 
 	// ... add whatever other systems you need here to make epic game
 }
@@ -627,12 +733,16 @@ setup_player :: proc(e: ^Entity) {
 	e.max_health = 100
 	e.current_health = e.max_health
 
-	e.vitality = 5
-	e.chance = 5
-	e.lockpick = 5
-	e.hack = 5
-	e.endurance = 5
-	e.mana = 5
+	e.vitality = 100
+	e.chance = 100
+	e.lockpick = 100
+	e.hack = 100
+	e.endurance = 100
+	e.power = 100
+	e.charisma = 100
+	e.intelligence = 100
+	e.damage_low = 1
+	e.damage_high = 3
 
 	e.update_proc = proc(e: ^Entity) {
 
@@ -778,6 +888,7 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 	}
 	else if cell.kind == .tile {
 		log.debug("lol")
+		append(&ctx.gs.last_actions, strings.concatenate({"you attack"}))
 		random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
 		log.debug(random)
 		chance : f32 = f32(e.chance) / 100

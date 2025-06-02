@@ -201,6 +201,15 @@ door_level_to_string :: proc(input : Door_Level) -> string {
 	return ""
 }
 
+//
+// Utils
+
+hint_ui :: struct {
+	pos: Vec2,
+	size: Vec2,
+	text: string,
+}
+
 
 //
 // helpers
