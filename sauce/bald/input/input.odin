@@ -48,6 +48,24 @@ add_input :: proc(dest: ^Input, src: Input) {
 	}
 }
 
+any_key_pressed :: proc() -> Key_Code {
+	for i := 65; i <= 90; i += 1 {
+		if key_pressed(Key_Code(i)) {
+			return Key_Code(i)
+		}
+	}
+	for i := 48; i <= 57; i += 1 {
+		if key_pressed(Key_Code(i)) {
+			return Key_Code(i)
+		}
+	}
+	if key_pressed(.SPACE) {
+		return .SPACE
+	}
+	else {
+		return .INVALID
+	}
+}
 key_pressed :: proc(code: Key_Code) -> bool {
 	return .pressed in state.keys[code]
 }
@@ -135,6 +153,87 @@ event_callback :: proc "c" (event: ^sapp.Event) { // events example: https://flo
 			input_state.keys[event.key_code] += { .repeat }
 		}
 	}
+}
+
+key_code_to_string :: proc(key: Key_Code) -> string {
+	#partial switch(key) {
+		case .A :
+			return "a"
+		case .B :
+			return "b"
+		case .C :
+			return "c"
+		case .D :
+			return "d"
+		case .E :
+			return "e"
+		case .F :
+			return "f"
+		case .G :
+			return "g"
+		case .H :
+			return "h"
+		case .I :
+			return "i"
+		case .J :
+			return "j"
+		case .K :
+			return "k"
+		case .L :
+			return "l"
+		case .M :
+			return "m"
+		case .N :
+			return "n"
+		case .O :
+			return "o"
+		case .P :
+			return "p"
+		case .Q :
+			return "q"
+		case .R :
+			return "r"
+		case .S :
+			return "s"
+		case .T :
+			return "t"
+		case .U :
+			return "u"
+		case .V :
+			return "v"
+		case .W :
+			return "w"
+		case .X :
+			return "x"
+		case .Y :
+			return "y"
+		case .Z :
+			return "z"
+		case .SPACE :
+			return " "
+		case ._0 :
+			return "0"
+		case ._1 :
+			return "1"
+		case ._2 :
+			return "2"
+		case ._3 :
+			return "3"
+		case ._4 :
+			return "4"
+		case ._5 :
+			return "5"
+		case ._6 :
+			return "6"
+		case ._7 :
+			return "7"
+		case ._8 :
+			return "8"
+		case ._9 :
+			return "9"
+	}
+
+	return ""
 }
 
 //

@@ -42,7 +42,12 @@ window_h := 720
 map_path := "./tiled/map0.tmj"
 starting_y : f32 = 16 * 5
 
+game_state_name := Game_State_Name.main_menu
+
 DEBUG_HINTS := false
+
+CONSOLE_COMMAND := false
+CONSOLE_TEXT := ""
 
 when NOT_RELEASE {
 	// can edit stuff in here to be whatever for testing
@@ -126,6 +131,11 @@ Input_Action :: enum u8 {
 	click,
 	use,
 	interact,
+}
+
+Game_State_Name :: enum u8 {
+	main_menu,
+	game
 }
 
 //
@@ -257,23 +267,38 @@ app_frame :: proc() {
 
 	// right now we are just calling the game update, but in future this is where you'd do a big
 	// "UX" switch for startup splash, main menu, settings, in-game, etc
+	switch game_state_name {
+		case .main_menu: {
+			main_menu_ui()
 
-	{
-		game_ui()
+			main_menu_update()
+		}
+		case .game: {
+			game_ui()
+
+			sound.play_continuously("event:/ambiance", "")
+
+			game_update()
+			game_draw()
+
+			volume :f32= 0.75
+			sound.update(get_player().pos, volume)
+		}
 	}
-
-	sound.play_continuously("event:/ambiance", "")
-
-	game_update()
-	game_draw()
-
-	volume :f32= 0.75
-	sound.update(get_player().pos, volume)
 }
 
 app_shutdown :: proc() {
 	// called on exit
 
+}
+
+main_menu_ui :: proc() {
+	draw.push_coord_space(get_screen_space())
+
+	screen_x, screen_y := screen_pivot(.top_center)
+	draw.draw_text({screen_x, screen_y - 20}, "PIXEL DETECTIVE", z_layer=.ui, pivot=Pivot.top_center, scale=5)
+
+	draw.draw_text({screen_x, screen_y - 500}, "Press any key", z_layer=.ui, pivot=Pivot.top_center, scale=2)
 }
 
 game_ui :: proc() {
@@ -391,13 +416,26 @@ game_ui :: proc() {
 	}
 
 	// TARGET
-	screen_x, screen_y = screen_pivot(.bottom_left)
+	screen_x, screen_y = screen_pivot(.top_right)
 	if ctx.gs.current_target != nil {
 		result_hp := strconv.itoa(buf[:], int(ctx.gs.current_target.current_health))
 		str = string(result_hp)
 		target_string : string =  strings.concatenate({"target : ", ctx.gs.current_target.name, " (", result_hp, "HP)"})
-		draw.draw_text({screen_x + f32(window_w) - 400, screen_y + 75}, target_string, z_layer=.ui, pivot=Pivot.top_left)
+		draw.draw_text({screen_x - 400, screen_y - 650}, target_string, z_layer=.ui, pivot=Pivot.top_left)
 	}
+
+	// CONSOLE
+	if CONSOLE_COMMAND {
+		xform := Matrix4(1)
+		xform *= utils.xform_translate(Vec2({0, 0}))
+			
+		draw.draw_rect_xform(xform, Vec2({f32(window_w), 20}), col=Vec4{0.2,0.2,0.2,1})
+		draw.draw_text({screen_x + 2, screen_y + 15}, CONSOLE_TEXT, z_layer=.ui, pivot=Pivot.top_left)
+	}
+}
+
+main_menu_init :: proc() {
+
 }
 
 game_init :: proc() {
@@ -585,6 +623,34 @@ init_hints :: proc() {
 	append(&ctx.gs.hints, hint)
 }
 
+main_menu_update :: proc()
+{
+	ctx.gs.scratch = {} // auto-zero scratch for each update
+
+	// this'll be using the last frame's camera position, but it's fine for most things
+	draw.push_coord_space(get_world_space())
+
+	// setup world for first game tick
+	if ctx.gs.ticks == 0 {
+		main_menu_init()
+	}
+
+	rebuild_scratch_helpers()
+
+	if input.key_pressed(.ESC) {
+		sapp.request_quit()
+		return
+	}
+	if input.any_key_press_and_consume() {
+		game_state_name = Game_State_Name.game
+		ctx.gs.ticks = 0
+		return
+	}
+
+	ctx.gs.game_time_elapsed += f64(ctx.delta_t)
+	ctx.gs.ticks += 1
+}
+
 game_update :: proc() {
 	ctx.gs.scratch = {} // auto-zero scratch for each update
 	defer {
@@ -623,6 +689,20 @@ game_update :: proc() {
 	}
 	if input.key_pressed(.F1) {
 		DEBUG_HINTS = !DEBUG_HINTS
+	}
+	if input.key_pressed(.F10) {
+		CONSOLE_COMMAND = !CONSOLE_COMMAND
+	}
+	if CONSOLE_COMMAND {
+		if input.key_pressed(.ENTER) {
+			analyse_command(CONSOLE_TEXT)
+			CONSOLE_COMMAND = false
+			CONSOLE_TEXT = ""
+		}
+		else {
+			the_key := input.any_key_pressed()
+			CONSOLE_TEXT = strings.concatenate({CONSOLE_TEXT, input.key_code_to_string(the_key)})
+		}
 	}
 	if input.key_pressed(.ESC) {
 		sapp.request_quit()
@@ -775,6 +855,10 @@ setup_player :: proc(e: ^Entity) {
 	e.damage_high = 3
 
 	e.update_proc = proc(e: ^Entity) {
+
+		if CONSOLE_COMMAND {
+			return
+		}
 
 		if e.can_move == false {
 			e.time_to_move -= ctx.delta_t
@@ -1201,6 +1285,53 @@ move_time :: proc() {
 		if ctx.gs.time_hour > 23 {
 			ctx.gs.time_hour = 0
 			ctx.gs.day += 1
+		}
+	}
+}
+
+// COMMANDE
+
+analyse_command :: proc(command: string) {
+	ss := strings.split(command, " ")
+	log.debug("split:", ss)
+	if ss[0] == "set" {
+		if len (ss) < 3 {
+			log.info("unknonw command :", command)
+			return
+		}
+		if ss[3] == "0" { // PLAYER
+			if ss[1] == "int" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().intelligence = n
+			}
+			else if ss[1] == "vit" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().vitality = n
+			}
+			else if ss[1] == "chan" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().chance = n
+			}
+			else if ss[1] == "lock" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().lockpick = n
+			}
+			else if ss[1] == "hack" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().hack = n
+			}
+			else if ss[1] == "end" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().endurance = n
+			}
+			else if ss[1] == "pow" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().power = n
+			}
+			else if ss[1] == "char" {
+				n, ok := strconv.parse_int(ss[2])
+				get_player().charisma = n
+			}
 		}
 	}
 }
