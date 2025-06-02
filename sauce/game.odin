@@ -76,7 +76,7 @@ Game_State :: struct {
 	hint_text: string,
 	force_hint_text: string,
 
-	// sloppy state dump
+	in_discussion: bool,
 
 	// player
 	player_handle: Entity_Handle,
@@ -171,6 +171,8 @@ Entity :: struct {
 
 	max_health: f32,
 	current_health: f32,
+
+	enemy: bool,
 
 	// door
 	door_state: bald_user.Door_State,
@@ -437,6 +439,18 @@ game_ui :: proc() {
 			
 		draw.draw_rect_xform(xform, Vec2({f32(window_w), 20}), col=Vec4{0.2,0.2,0.2,1})
 		draw.draw_text({screen_x + 2, screen_y + 15}, CONSOLE_TEXT, z_layer=.ui, pivot=Pivot.top_left)
+	}
+
+	// TALK
+	if ctx.gs.in_discussion {
+		screen_x, screen_y = screen_pivot(.top_center)
+		xform := Matrix4(1)
+		xform *= utils.xform_translate(Vec2({640 - 150, 720 / 2 - 150}))
+			
+		draw.draw_rect_xform(xform, Vec2({300, 300}), col=Vec4{0.2,0.2,0.2,1})
+		draw.draw_text({screen_x + 2, 720 / 2 + 150}, "What do you want ?", z_layer=.ui, pivot=Pivot.top_center)
+
+		draw.draw_text({screen_x + 2 - 150, 720 / 2 + 100}, "1 - Nothing", z_layer=.ui, pivot=Pivot.top_left)
 	}
 }
 
@@ -724,6 +738,11 @@ game_update :: proc() {
 	if input.key_pressed(.ESC) {
 		sapp.request_quit()
 	}
+	if ctx.gs.in_discussion {
+		if input.key_pressed(._1) {
+			ctx.gs.in_discussion = false
+		}
+	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
 
@@ -877,6 +896,10 @@ setup_player :: proc(e: ^Entity) {
 			return
 		}
 
+		if ctx.gs.in_discussion {
+			return 
+		}
+
 		if e.can_move == false {
 			e.time_to_move -= ctx.delta_t
 			if e.time_to_move <= 0 {
@@ -1020,46 +1043,51 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 		}
 	}
 	else if cell.kind == .tile {
-		ctx.gs.current_target = cell
-		random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
-		multiply := 1
-		multiply_text := ""
-		if random == 0 {
-			multiply_text = "(critical fail)"
-			multiply = 0
-		}
-		else if random == 19 {
-			multiply_text = "(critical success)"
-			multiply = 2
-		}
-		chance : f64 = f64(e.chance) / 100
-		max : f64 = (100 /f64(3)) + chance * (100 * (2 / f64(3)))
-		rest := (100 - max) / 2
+		if cell.enemy == true { // ATTACK
+			ctx.gs.current_target = cell
+			random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
+			multiply := 1
+			multiply_text := ""
+			if random == 0 {
+				multiply_text = "(critical fail)"
+				multiply = 0
+			}
+			else if random == 19 {
+				multiply_text = "(critical success)"
+				multiply = 2
+			}
+			chance : f64 = f64(e.chance) / 100
+			max : f64 = (100 /f64(3)) + chance * (100 * (2 / f64(3)))
+			rest := (100 - max) / 2
 
-		final_rand := rand.float64_range(0, 100)
-		buf: [4]byte
-		if final_rand <= max {
-			result := strconv.itoa(buf[:], e.damage_high * multiply)
-			str := string(result)
-			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-			cell.current_health -= f32(e.damage_high * multiply)
-		}
-		else if final_rand <= max + rest {
-			result := strconv.itoa(buf[:], (e.damage_high - e.damage_low) * multiply)
-			str := string(result)
-			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-			cell.current_health -= f32((e.damage_high - e.damage_low) * multiply)
-		}
-		else {
-			result := strconv.itoa(buf[:], e.damage_low * multiply)
-			str := string(result)
-			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-			cell.current_health -= f32(e.damage_low * multiply)
-		}
+			final_rand := rand.float64_range(0, 100)
+			buf: [4]byte
+			if final_rand <= max {
+				result := strconv.itoa(buf[:], e.damage_high * multiply)
+				str := string(result)
+				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+				cell.current_health -= f32(e.damage_high * multiply)
+			}
+			else if final_rand <= max + rest {
+				result := strconv.itoa(buf[:], (e.damage_high - e.damage_low) * multiply)
+				str := string(result)
+				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+				cell.current_health -= f32((e.damage_high - e.damage_low) * multiply)
+			}
+			else {
+				result := strconv.itoa(buf[:], e.damage_low * multiply)
+				str := string(result)
+				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+				cell.current_health -= f32(e.damage_low * multiply)
+			}
 
-		if cell.current_health <= 0 {
-			append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is dead"}))
-			ctx.gs.current_target = nil
+			if cell.current_health <= 0 {
+				append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is dead"}))
+				ctx.gs.current_target = nil
+			}
+		}
+		else { //TALK
+			ctx.gs.in_discussion = true
 		}
 	}
 	else {
