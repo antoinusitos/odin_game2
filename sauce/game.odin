@@ -74,6 +74,7 @@ Game_State :: struct {
 	// hints
 	hints: [dynamic]bald_user.hint_ui,
 	hint_text: string,
+	force_hint_text: string,
 
 	// sloppy state dump
 
@@ -224,6 +225,8 @@ Entity_Kind :: enum {
 	dot,
 	door,
 	stairs_up,
+	restaurant,
+	police,
 
 	//items
 	lockpick,
@@ -254,6 +257,8 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .stairs_up: setup_stairs_up(e)
 		case .lockpick: setup_lockpick(e)
 		case .baton: setup_baton(e)
+		case .restaurant: setup_restaurant(e)
+		case .police: setup_police(e)
 	}
 }
 
@@ -531,6 +536,14 @@ game_init :: proc() {
 			p = entity_create(.stairs_up)
 			ctx.gs.all_cells_entity[i] = p
 		}
+		else if id == 947 {
+			p = entity_create(.restaurant)
+			ctx.gs.all_cells_entity[i] = p
+		}
+		else if id == 897 {
+			p = entity_create(.police)
+			ctx.gs.all_cells_entity[i] = p
+		}
 		else {
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = nil
@@ -669,6 +682,7 @@ game_update :: proc() {
 
 	rebuild_scratch_helpers()
 	
+	ctx.gs.force_hint_text = ""
 	// big :update time
 	for handle in get_all_ents() {
 		e := entity_from_handle(handle)
@@ -713,7 +727,7 @@ game_update :: proc() {
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
 
-	ctx.gs.hint_text = ""
+	ctx.gs.hint_text = ctx.gs.force_hint_text
 	for hint in ctx.gs.hints {
 		pos := mouse_pos_in_current_space()
 		if pos.x >= hint.pos.x && pos.x <= hint.pos.x + hint.size.x &&
@@ -984,7 +998,9 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 				append(&ctx.gs.last_actions, strings.concatenate({"lockpicked : ", cell.name, " (", bald_user.door_level_to_string(cell.door_level), ")"}))
 				cell.door_state = bald_user.Door_State.Open
 				cell.sprite = .door
-				e.lockpick += 1
+				if e.lockpick < 100 {
+					e.lockpick += 1
+				}
 				ctx.gs.all_cells[index] = false
 			}
 			else {
@@ -1067,11 +1083,19 @@ setup_thing1 :: proc(using e: ^Entity) {
 setup_tile :: proc(using e: ^Entity) {
 	e.kind = .tile
 
-	e.name = "tile"
+	//e.name = "tile"
+	e.name = "Davis Moore"
 	e.sprite = .playertile;
 	e.can_be_interact_with = true
 	e.max_health = 30
 	e.current_health = e.max_health
+
+	e.update_proc = proc(e: ^Entity) {
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			ctx.gs.force_hint_text = e.name
+		}
+	}
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
@@ -1215,6 +1239,42 @@ setup_stairs_up :: proc(using e: ^Entity) {
 	}
 }
 
+setup_restaurant :: proc(using e: ^Entity) {
+	e.kind = .restaurant
+
+	e.name = "restaurant"
+	e.sprite = .restaurant;
+
+	e.update_proc = proc(e: ^Entity) {
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			ctx.gs.force_hint_text = e.name
+		}
+	}
+
+	e.draw_proc = proc(e: Entity) {
+		draw_entity_default(e)
+	}
+}
+
+setup_police :: proc(using e: ^Entity) {
+	e.kind = .police
+
+	e.name = "police"
+	e.sprite = .police;
+
+	e.update_proc = proc(e: ^Entity) {
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			ctx.gs.force_hint_text = e.name
+		}
+	}
+
+	e.draw_proc = proc(e: Entity) {
+		draw_entity_default(e)
+	}
+}
+
 //
 // items
 
@@ -1296,7 +1356,19 @@ move_time :: proc() {
 
 analyse_command :: proc(command: string) {
 	ss := strings.split(command, " ")
-	if ss[0] == "set" {
+	if ss[0] == "god" {
+		get_player().intelligence = 100
+		get_player().vitality = 100
+		get_player().chance = 100
+		get_player().lockpick = 100
+		get_player().hack = 100
+		get_player().endurance = 100
+		get_player().power = 100
+		get_player().charisma = 100
+		get_player().max_health = 9999
+		get_player().current_health = get_player().max_health
+	}
+	else if ss[0] == "set" {
 		if ss[1] == "pos" && len (ss) < 6 {
 			if ss[4] == "0" { // PLAYER
 				x, ok := strconv.parse_int(ss[2])
