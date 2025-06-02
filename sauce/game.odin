@@ -42,6 +42,8 @@ window_h := 720
 map_path := "./tiled/map0.tmj"
 starting_y : f32 = 16 * 5
 
+DEBUG_HINTS :: false
+
 when NOT_RELEASE {
 	// can edit stuff in here to be whatever for testing
 	PROFILE :: false
@@ -342,7 +344,7 @@ game_ui :: proc() {
 	action_index := 0
 	for action_it_index := len(ctx.gs.last_actions) - 1; action_it_index >= 0; action_it_index -= 1 {
 		if len(ctx.gs.last_actions) > action_it_index {
-			draw.draw_text({screen_x - 240, screen_y - 80 - f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left)
+			draw.draw_text({screen_x - 240, screen_y - 80 - f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left, scale= 0.85)
 			action_index += 1
 			if action_index >= 37 {
 				break
@@ -378,6 +380,15 @@ game_ui :: proc() {
 	screen_x, screen_y = screen_pivot(.top_left)
 	//draw.draw_text(mouse_pos_in_current_space() - Vec2({0, 20}), ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
 	draw.draw_text({screen_x + 2, screen_y - 50}, ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
+
+	if DEBUG_HINTS {
+		for hint in ctx.gs.hints {
+			xform := Matrix4(1)
+			xform *= utils.xform_translate(hint.pos - Vec2({-8, 15}))
+			
+			draw.draw_rect_xform(xform, hint.size, col=Vec4{0,1,0,0.8})
+		}
+	}
 }
 
 game_init :: proc() {
@@ -500,6 +511,10 @@ game_init :: proc() {
 	append(&player.inventory, baton)
 
 	// hints
+	init_hints()
+}
+
+init_hints :: proc() {
 	hint := bald_user.hint_ui({})
 	hint.pos = Vec2({0, f32(window_h)})
 	hint.size = Vec2({50, 15})
@@ -733,14 +748,14 @@ setup_player :: proc(e: ^Entity) {
 	e.max_health = 100
 	e.current_health = e.max_health
 
-	e.vitality = 100
-	e.chance = 100
-	e.lockpick = 100
-	e.hack = 100
-	e.endurance = 100
-	e.power = 100
-	e.charisma = 100
-	e.intelligence = 100
+	e.vitality = 5
+	e.chance = 5
+	e.lockpick = 5
+	e.hack = 5
+	e.endurance = 5
+	e.power = 5
+	e.charisma = 5
+	e.intelligence = 5
 	e.damage_low = 1
 	e.damage_high = 3
 
@@ -887,16 +902,38 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 		}
 	}
 	else if cell.kind == .tile {
-		log.debug("lol")
-		append(&ctx.gs.last_actions, strings.concatenate({"you attack"}))
 		random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
-		log.debug(random)
-		chance : f32 = f32(e.chance) / 100
-		log.debug(chance)
-		max : f32 = f32(0.33) + chance * f32(0.66)
-		log.debug(max)
-		rest := (100 - max * 100) / 2
-		log.debug(rest)
+		multiply := 1
+		multiply_text := ""
+		if random == 0 {
+			multiply_text = "(critical fail)"
+			multiply = 0
+		}
+		else if random == 19 {
+			multiply_text = "(critical success)"
+			multiply = 2
+		}
+		chance : f64 = f64(e.chance) / 100
+		max : f64 = (100 /f64(3)) + chance * (100 * (2 / f64(3)))
+		rest := (100 - max) / 2
+
+		final_rand := rand.float64_range(0, 100)
+		buf: [4]byte
+		if final_rand <= max {
+			result := strconv.itoa(buf[:], e.damage_high * multiply)
+			str := string(result)
+			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+		}
+		else if final_rand <= max + rest {
+			result := strconv.itoa(buf[:], (e.damage_high - e.damage_low) * multiply)
+			str := string(result)
+			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+		}
+		else {
+			result := strconv.itoa(buf[:], e.damage_low * multiply)
+			str := string(result)
+			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+		}
 	}
 	else {
 		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
