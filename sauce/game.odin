@@ -42,7 +42,7 @@ window_h := 720
 map_path := "./tiled/map0.tmj"
 starting_y : f32 = 16 * 5
 
-DEBUG_HINTS :: false
+DEBUG_HINTS := false
 
 when NOT_RELEASE {
 	// can edit stuff in here to be whatever for testing
@@ -98,6 +98,7 @@ Game_State :: struct {
 	last_actions: [dynamic]string,
 	current_lockpick: ^Entity,
 	current_weapon: ^Entity,
+	current_target: ^Entity,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -378,7 +379,6 @@ game_ui :: proc() {
 
 	// HINT
 	screen_x, screen_y = screen_pivot(.top_left)
-	//draw.draw_text(mouse_pos_in_current_space() - Vec2({0, 20}), ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
 	draw.draw_text({screen_x + 2, screen_y - 50}, ctx.gs.hint_text, z_layer=.ui, pivot=Pivot.top_left)
 
 	if DEBUG_HINTS {
@@ -388,6 +388,15 @@ game_ui :: proc() {
 			
 			draw.draw_rect_xform(xform, hint.size, col=Vec4{0,1,0,0.8})
 		}
+	}
+
+	// TARGET
+	screen_x, screen_y = screen_pivot(.bottom_left)
+	if ctx.gs.current_target != nil {
+		result_hp := strconv.itoa(buf[:], int(ctx.gs.current_target.current_health))
+		str = string(result_hp)
+		target_string : string =  strings.concatenate({"target : ", ctx.gs.current_target.name, " (", result_hp, "HP)"})
+		draw.draw_text({screen_x + f32(window_w) - 400, screen_y + 75}, target_string, z_layer=.ui, pivot=Pivot.top_left)
 	}
 }
 
@@ -611,6 +620,12 @@ game_update :: proc() {
 		pos := mouse_pos_in_current_space()
 		log.info("schloop at", pos)
 		sound.play("event:/schloop", pos=pos)
+	}
+	if input.key_pressed(.F1) {
+		DEBUG_HINTS = !DEBUG_HINTS
+	}
+	if input.key_pressed(.ESC) {
+		sapp.request_quit()
 	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
@@ -902,6 +917,7 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 		}
 	}
 	else if cell.kind == .tile {
+		ctx.gs.current_target = cell
 		random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
 		multiply := 1
 		multiply_text := ""
@@ -923,16 +939,24 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			result := strconv.itoa(buf[:], e.damage_high * multiply)
 			str := string(result)
 			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+			cell.current_health -= f32(e.damage_high * multiply)
 		}
 		else if final_rand <= max + rest {
 			result := strconv.itoa(buf[:], (e.damage_high - e.damage_low) * multiply)
 			str := string(result)
 			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+			cell.current_health -= f32((e.damage_high - e.damage_low) * multiply)
 		}
 		else {
 			result := strconv.itoa(buf[:], e.damage_low * multiply)
 			str := string(result)
 			append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
+			cell.current_health -= f32(e.damage_low * multiply)
+		}
+
+		if cell.current_health <= 0 {
+			append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is dead"}))
+			ctx.gs.current_target = nil
 		}
 	}
 	else {
@@ -959,6 +983,8 @@ setup_tile :: proc(using e: ^Entity) {
 	e.name = "tile"
 	e.sprite = .playertile;
 	e.can_be_interact_with = true
+	e.max_health = 30
+	e.current_health = e.max_health
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
