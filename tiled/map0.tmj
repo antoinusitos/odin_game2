@@ -58,7 +58,7 @@
  "tilesets":[
         {
          "firstgid":1,
-         "source":"..\/..\/HotSauceV1\/tiled\/colored-transparent_packed.tsx"
+         "source":"colored-transparent_packed.tsx"
         }],
  "tilewidth":16,
  "type":"map",
