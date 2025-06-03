@@ -85,6 +85,7 @@ Game_State :: struct {
 	// world
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
 	all_cells_entity: [TILE_WIDTH * TILE_HEIGHT]^Entity,
+	all_doors: [dynamic]^Entity,
 
 	// time
 	time_hour: int,
@@ -190,6 +191,8 @@ Entity :: struct {
 	door_state: bald_user.Door_State,
 	door_level: bald_user.Door_Level,
 	unlocked: bool,
+	attributed: bool,
+	building_index: int,
 
 	// tile
 	special_tile: bool,
@@ -554,6 +557,7 @@ game_init :: proc() {
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
 			p.door_state = bald_user.Door_State.Open
+			append(&ctx.gs.all_doors, p)
 		}
 		else if id == 447 {
 			p = entity_create(.door)
@@ -561,12 +565,14 @@ game_init :: proc() {
 			ctx.gs.all_cells_entity[i] = p
 			p.door_state = bald_user.Door_State.Locked
 			p.sprite = .door_closed
+			append(&ctx.gs.all_doors, p)
 		}
 		else if id == 448 {
 			p = entity_create(.door)
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
 			p.door_state = bald_user.Door_State.Open
+			append(&ctx.gs.all_doors, p)
 		}
 		else if id == 320 {
 			p = entity_create(.tile3)
@@ -619,6 +625,40 @@ game_init :: proc() {
 		}
 
 		i += 1
+	}
+
+	building_num := 1
+	for door in ctx.gs.all_doors
+	{
+		if ctx.gs.all_cells_entity[(door.y + 1) * TILE_WIDTH + door.x + 1].kind == .police {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y - 1) * TILE_WIDTH + door.x + 1].kind == .police {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y + 1) * TILE_WIDTH + door.x - 1].kind == .police {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y - 1) * TILE_WIDTH + door.x - 1].kind == .police {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y + 1) * TILE_WIDTH + door.x + 1].kind == .restaurant {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y - 1) * TILE_WIDTH + door.x + 1].kind == .restaurant {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y + 1) * TILE_WIDTH + door.x - 1].kind == .restaurant {
+			door.attributed = true
+		}
+		else if ctx.gs.all_cells_entity[(door.y - 1) * TILE_WIDTH + door.x - 1].kind == .restaurant {
+			door.attributed = true
+		}
+		else {
+			door.attributed = true
+			door.building_index = building_num
+			building_num += 1
+		}
 	}
 
 	player := entity_create(.player)
@@ -1378,6 +1418,15 @@ setup_door :: proc(using e: ^Entity) {
 			e.door_state = bald_user.Door_State.Locked
 			e.sprite = .door_closed
 			ctx.gs.all_cells[int(e.y) * TILE_WIDTH + int(e.x)] = true
+		}
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			if e.building_index != 0 {
+				buf: [4]byte
+				result := strconv.itoa(buf[:], int(e.building_index))
+				str := string(result)
+				ctx.gs.force_hint_text = strings.concatenate({"Building ", str})
+			}
 		}
 	}
 
