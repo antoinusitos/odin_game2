@@ -76,8 +76,6 @@ Game_State :: struct {
 	hint_text: string,
 	force_hint_text: string,
 
-	in_discussion: bool,
-
 	// player
 	player_handle: Entity_Handle,
 	player_cell: int,
@@ -168,11 +166,20 @@ Entity :: struct {
 
 	can_move: bool,
 	time_to_move: f32,
+	in_discussion: bool,
 
 	max_health: f32,
 	current_health: f32,
 
+	child_entity: ^Entity,
+	parent_entity: ^Entity,
+
+	x: int,
+	y: int,
+
 	enemy: bool,
+	movement_total: int,
+	last_movement: Input_Action,
 
 	// door
 	door_state: bald_user.Door_State,
@@ -442,7 +449,7 @@ game_ui :: proc() {
 	}
 
 	// TALK
-	if ctx.gs.in_discussion {
+	if get_player().in_discussion {
 		screen_x, screen_y = screen_pivot(.top_center)
 		xform := Matrix4(1)
 		xform *= utils.xform_translate(Vec2({640 - 150, 720 / 2 - 150}))
@@ -488,9 +495,13 @@ game_init :: proc() {
 	for id in copied_array {
 		p : ^Entity = nil
 		if id == 25 {
-			p = entity_create(.tile)
-			ctx.gs.all_cells[i] = true
+			p1 := entity_create(.tile)
+			p = entity_create(.dot)
+			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
+			p.child_entity = p1
+			p1.parent_entity = p
+			p.can_be_interact_with = true
 		}
 		else if id == 844 {
 			p = entity_create(.wall)
@@ -567,6 +578,13 @@ game_init :: proc() {
 			x := i % TILE_WIDTH
 			y := (i - x) / TILE_WIDTH
 			p.pos = Vec2{f32(x * 16), starting_y + f32(y * 16)}
+			p.x = x
+			p.y = y
+			if p.child_entity != nil {
+				p.child_entity.pos = p.pos
+				p.child_entity.x = x
+				p.child_entity.y = y
+			}
 		}
 
 		i += 1
@@ -738,9 +756,11 @@ game_update :: proc() {
 	if input.key_pressed(.ESC) {
 		sapp.request_quit()
 	}
-	if ctx.gs.in_discussion {
+	if get_player().in_discussion {
 		if input.key_pressed(._1) {
-			ctx.gs.in_discussion = false
+			get_player().in_discussion = false
+			ctx.gs.current_target.in_discussion = false
+			ctx.gs.current_target = nil
 		}
 	}
 
@@ -896,7 +916,7 @@ setup_player :: proc(e: ^Entity) {
 			return
 		}
 
-		if ctx.gs.in_discussion {
+		if e.in_discussion {
 			return 
 		}
 
@@ -1042,9 +1062,10 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			}
 		}
 	}
-	else if cell.kind == .tile {
-		if cell.enemy == true { // ATTACK
-			ctx.gs.current_target = cell
+	else if cell.kind == .tile || cell.kind == .dot && cell.child_entity.kind == .tile {
+		tile := (cell.kind == .dot ? cell.child_entity : cell)
+		if tile.enemy == true { // ATTACK
+			ctx.gs.current_target = tile
 			random := rand.int31_max(20) // 0 fail critical, 19 success critical, rest ok
 			multiply := 1
 			multiply_text := ""
@@ -1066,28 +1087,30 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 				result := strconv.itoa(buf[:], e.damage_high * multiply)
 				str := string(result)
 				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-				cell.current_health -= f32(e.damage_high * multiply)
+				tile.current_health -= f32(e.damage_high * multiply)
 			}
 			else if final_rand <= max + rest {
 				result := strconv.itoa(buf[:], (e.damage_high - e.damage_low) * multiply)
 				str := string(result)
 				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-				cell.current_health -= f32((e.damage_high - e.damage_low) * multiply)
+				tile.current_health -= f32((e.damage_high - e.damage_low) * multiply)
 			}
 			else {
 				result := strconv.itoa(buf[:], e.damage_low * multiply)
 				str := string(result)
 				append(&ctx.gs.last_actions, strings.concatenate({"you deal ", str, " damage ", multiply_text}))
-				cell.current_health -= f32(e.damage_low * multiply)
+				tile.current_health -= f32(e.damage_low * multiply)
 			}
 
-			if cell.current_health <= 0 {
-				append(&ctx.gs.last_actions, strings.concatenate({cell.name, " is dead"}))
+			if tile.current_health <= 0 {
+				append(&ctx.gs.last_actions, strings.concatenate({tile.name, " is dead"}))
 				ctx.gs.current_target = nil
 			}
 		}
 		else { //TALK
-			ctx.gs.in_discussion = true
+			get_player().in_discussion = true
+			tile.in_discussion = true
+			ctx.gs.current_target = tile
 		}
 	}
 	else {
@@ -1097,7 +1120,6 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 
 check_cell :: proc(index: int) -> ^Entity {
 	if ctx.gs.all_cells_entity[index] != nil && 
-		ctx.gs.all_cells_entity[index].kind != .dot &&
 		ctx.gs.all_cells_entity[index].can_be_interact_with == true {
 			return ctx.gs.all_cells_entity[index]
 	}
@@ -1115,13 +1137,73 @@ setup_tile :: proc(using e: ^Entity) {
 	e.name = "Davis Moore"
 	e.sprite = .playertile;
 	e.can_be_interact_with = true
+	e.enemy = false
 	e.max_health = 30
 	e.current_health = e.max_health
+
+	e.last_movement = Input_Action.left
 
 	e.update_proc = proc(e: ^Entity) {
 		pos := mouse_pos_in_current_space()
 		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
 			ctx.gs.force_hint_text = e.name
+		}
+
+		if e.in_discussion {
+			return
+		}
+
+		if e.can_move == false {
+			e.time_to_move -= ctx.delta_t
+			if e.time_to_move <= 0 {
+				e.time_to_move = 0
+				e.can_move = true	
+			}
+		}
+		else {
+			e.parent_entity.can_be_interact_with = false
+			e.parent_entity.child_entity =  nil
+			if e.last_movement == Input_Action.left {
+				e.pos.x -= 16
+				e.x -= 1
+				e.movement_total += 1
+				if e.movement_total >= 2 {
+					e.movement_total = 0
+					e.last_movement = Input_Action.down
+				}
+			}
+			else if e.last_movement == Input_Action.down {
+				e.pos.y -= 16
+				e.y -= 1
+				e.movement_total += 1
+				if e.movement_total >= 2 {
+					e.movement_total = 0
+					e.last_movement = Input_Action.right
+				}
+			}
+			else if e.last_movement == Input_Action.right {
+				e.pos.x += 16
+				e.x += 1
+				e.movement_total += 1
+				if e.movement_total >= 2 {
+					e.movement_total = 0
+					e.last_movement = Input_Action.up
+				}
+			}
+			else if e.last_movement == Input_Action.up {
+				e.pos.y += 16
+				e.y += 1
+				e.movement_total += 1
+				if e.movement_total >= 2 {
+					e.movement_total = 0
+					e.last_movement = Input_Action.left
+				}
+			}
+			e.parent_entity = ctx.gs.all_cells_entity[int(e.y) * TILE_WIDTH + int(e.x)]
+			e.parent_entity.can_be_interact_with = true
+			e.parent_entity.child_entity = e
+			e.time_to_move = 0.5
+			e.can_move = false
 		}
 	}
 
