@@ -175,6 +175,19 @@ month_to_string :: proc(input : Month) -> string {
 	return ""
 }
 
+Quest_Step :: struct {
+	name : string,
+	desc : string,
+
+}
+
+Quest :: struct {
+	name : string,
+	current_step : int,
+	steps : [dynamic]Quest_Step,
+	
+}
+
 //
 // entity
 

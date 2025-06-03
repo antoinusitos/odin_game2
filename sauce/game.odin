@@ -106,6 +106,9 @@ Game_State :: struct {
 
 	work_selecting: bool,
 
+	// quests
+	all_quests: [dynamic]bald_user.Quest,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -473,6 +476,8 @@ game_ui :: proc() {
 			
 		draw.draw_rect_xform(xform, Vec2({300, 300}), col=Vec4{0.2,0.2,0.2,1})
 		draw.draw_text({screen_x + 2, 720 / 2 + 150}, "Work Selection", z_layer=.ui, pivot=Pivot.top_center)
+		
+		draw.draw_text({screen_x + 2 - 150, 720 / 2 + 100}, strings.concatenate({"1 - start ", ctx.gs.all_quests[0].name}), z_layer=.ui, pivot=Pivot.top_left)
 	}
 }
 
@@ -496,6 +501,12 @@ game_init :: proc() {
 	ctx.gs.player_cell_x = 1
 	ctx.gs.player_cell_y = 1
 	ctx.gs.player_cell = ctx.gs.player_cell_y * TILE_WIDTH + ctx.gs.player_cell_x
+
+	q: bald_user.Quest
+	q.name = "quest test"
+	q.current_step = 0
+	append(&q.steps, bald_user.Quest_Step({"step0", "a step 0"}))
+	append(&ctx.gs.all_quests, q)
 
 	map_info := utils.map_from_file(map_path)
 
@@ -783,6 +794,12 @@ game_update :: proc() {
 			ctx.gs.current_target = nil
 		}
 	}
+	if ctx.gs.work_selecting {
+		if input.key_pressed(._1) {
+			ctx.gs.work_selecting = false
+			append(&ctx.gs.last_actions, strings.concatenate({"started quest : ", ctx.gs.all_quests[0].name}))
+		}
+	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
 
@@ -936,7 +953,7 @@ setup_player :: proc(e: ^Entity) {
 			return
 		}
 
-		if e.in_discussion {
+		if e.in_discussion || ctx.gs.work_selecting{
 			return 
 		}
 
