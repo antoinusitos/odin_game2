@@ -184,6 +184,7 @@ Entity :: struct {
 	// door
 	door_state: bald_user.Door_State,
 	door_level: bald_user.Door_Level,
+	unlocked: bool,
 
 	// tile
 	special_tile: bool,
@@ -1045,6 +1046,7 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 					e.lockpick += 1
 				}
 				ctx.gs.all_cells[index] = false
+				cell.unlocked = true
 			}
 			else {
 				append(&ctx.gs.last_actions, strings.concatenate({"fail to lockpick : ", cell.name, " (", bald_user.door_level_to_string(cell.door_level), ")"}))
@@ -1330,6 +1332,14 @@ setup_door :: proc(using e: ^Entity) {
 	e.can_be_interact_with = true
 	random := rand.int31_max(4)
 	e.door_level = bald_user.Door_Level(random)
+
+	e.update_proc = proc(e: ^Entity) {
+		if ctx.gs.time_hour >= 10 && e.door_state == bald_user.Door_State.Open && !e.unlocked{
+			e.door_state = bald_user.Door_State.Locked
+			e.sprite = .door_closed
+			ctx.gs.all_cells[int(e.y) * TILE_WIDTH + int(e.x)] = true
+		}
+	}
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
