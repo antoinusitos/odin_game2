@@ -230,15 +230,7 @@ Entity_Kind :: enum {
 	nil,
 	player,
 	thing1,
-	tile,
-	tile2,
-	tile3,
-	tile4,
-	tile5,
-	tile6,
-	tile7,
-	tile8,
-	tile9,
+	ai,
 	wall,
 	dot,
 	door,
@@ -261,15 +253,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .nil:
 		case .player: setup_player(e)
 		case .thing1: setup_thing1(e)
-		case .tile: setup_tile(e)
-		case .tile2: setup_tile2(e)
-		case .tile3: setup_tile3(e)
-		case .tile4: setup_tile4(e)
-		case .tile5: setup_tile5(e)
-		case .tile6: setup_tile6(e)
-		case .tile7: setup_tile7(e)
-		case .tile8: setup_tile8(e)
-		case .tile9: setup_tile9(e)
+		case .ai: setup_ai(e)
 		case .wall: setup_wall(e)
 		case .dot: setup_dot(e)
 		case .door: setup_door(e)
@@ -524,7 +508,7 @@ game_init :: proc() {
 	for id in copied_array {
 		p : ^Entity = nil
 		if id == 25 {
-			p1 := entity_create(.tile)
+			p1 := entity_create(.ai)
 			p = entity_create(.dot)
 			ctx.gs.all_cells[i] = false
 			ctx.gs.all_cells_entity[i] = p
@@ -548,9 +532,10 @@ game_init :: proc() {
 			ctx.gs.all_cells_entity[i] = p
 		}
 		else if id == 177 {
-			p = entity_create(.tile2)
+			p = entity_create(.ai)
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
+			p.sprite = .player_tile2
 		}
 		else if id == 450 {
 			p = entity_create(.door)
@@ -575,19 +560,22 @@ game_init :: proc() {
 			append(&ctx.gs.all_doors, p)
 		}
 		else if id == 320 {
-			p = entity_create(.tile3)
+			p = entity_create(.ai)
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
+			p.sprite = .player_tile3
 		}
 		else if id == 224 {
-			p = entity_create(.tile4)
+			p = entity_create(.ai)
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
+			p.sprite = .player_tile4
 		}
 		else if id == 173 {
-			p = entity_create(.tile5)
+			p = entity_create(.ai)
 			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
+			p.sprite = .player_tile5
 		}
 		else if id == 297 {
 			p = entity_create(.stairs_up)
@@ -1050,7 +1038,7 @@ setup_player :: proc(e: ^Entity) {
 				entity_set_animation(e, .player_run, 0.1)
 				if moved {
 					e.can_move = false
-					e.time_to_move = 0.1
+					e.time_to_move = 0.5
 					move_time()
 				}
 			}
@@ -1140,7 +1128,7 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			}
 		}
 	}
-	else if cell.kind == .tile || cell.kind == .dot && cell.child_entity.kind == .tile {
+	else if cell.kind == .ai || cell.kind == .dot && cell.child_entity.kind == .ai {
 		tile := (cell.kind == .dot ? cell.child_entity : cell)
 		if tile.enemy == true { // ATTACK
 			ctx.gs.current_target = tile
@@ -1212,12 +1200,11 @@ setup_thing1 :: proc(using e: ^Entity) {
 	kind = .thing1
 }
 
-setup_tile :: proc(using e: ^Entity) {
-	e.kind = .tile
+setup_ai :: proc(using e: ^Entity) {
+	e.kind = .ai
 
-	//e.name = "tile"
 	e.name = "Davis Moore"
-	e.sprite = .playertile;
+	e.sprite = .player_tile;
 	e.can_be_interact_with = true
 	e.enemy = false
 	e.max_health = 30
@@ -1288,94 +1275,6 @@ setup_tile :: proc(using e: ^Entity) {
 			e.can_move = false
 		}
 	}
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile2 :: proc(using e: ^Entity) {
-	e.kind = .tile2
-
-	e.name = "tile2"
-	e.sprite = .playertile2;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile3 :: proc(using e: ^Entity) {
-	e.kind = .tile3
-
-	e.name = "tile3"
-	e.sprite = .playertile3;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile4 :: proc(using e: ^Entity) {
-	e.kind = .tile4
-
-	e.name = "tile4"
-	e.sprite = .playertile4;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile5 :: proc(using e: ^Entity) {
-	e.kind = .tile5
-
-	e.name = "tile5"
-	e.sprite = .playertile5;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile6 :: proc(using e: ^Entity) {
-	e.kind = .tile6
-
-	e.name = "tile6"
-	e.sprite = .playertile6;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile7 :: proc(using e: ^Entity) {
-	e.kind = .tile7
-
-	e.name = "tile7"
-	e.sprite = .playertile7;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile8 :: proc(using e: ^Entity) {
-	e.kind = .tile8
-
-	e.name = "tile8"
-	e.sprite = .playertile8;
-
-	e.draw_proc = proc(e: Entity) {
-		draw_entity_default(e)
-	}
-}
-
-setup_tile9 :: proc(using e: ^Entity) {
-	e.kind = .tile9
-
-	e.name = "tile9"
-	e.sprite = .playertile9;
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)

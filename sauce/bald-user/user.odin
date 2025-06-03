@@ -81,15 +81,15 @@ Sprite_Name :: enum {
 	//
 	// we could auto-gen this based on all the .png's in the images folder
 	// but I don't really see the point right now. It's not hard to type lol.
-	playertile,
-	playertile2,
-	playertile3,
-	playertile4,
-	playertile5,
-	playertile6,
-	playertile7,
-	playertile8,
-	playertile9,
+	player_tile,
+	player_tile2,
+	player_tile3,
+	player_tile4,
+	player_tile5,
+	player_tile6,
+	player_tile7,
+	player_tile8,
+	player_tile9,
 	wall,
 	dot,
 	door,
@@ -185,7 +185,7 @@ Quest :: struct {
 	name : string,
 	current_step : int,
 	steps : [dynamic]Quest_Step,
-	
+
 }
 
 //
