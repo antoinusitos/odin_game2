@@ -46,6 +46,8 @@ game_state_name := Game_State_Name.game
 
 DEBUG_HINTS := false
 
+DEBUG_ENTITY : ^Entity = nil
+
 CONSOLE_COMMAND := false
 CONSOLE_TEXT := ""
 
@@ -86,6 +88,7 @@ Game_State :: struct {
 	all_cells: [TILE_WIDTH * TILE_HEIGHT]bool,
 	all_cells_entity: [TILE_WIDTH * TILE_HEIGHT]^Entity,
 	all_doors: [dynamic]^Entity,
+	all_interest_points: [dynamic]^Entity,
 
 	// time
 	time_hour: int,
@@ -219,6 +222,11 @@ Entity :: struct {
 	// item
 	value_min: int,
 	value_max: int,
+
+	// ai
+	path: [dynamic]^Entity,
+	move_to_path: bool,
+	path_index: int,
 
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
@@ -431,6 +439,13 @@ game_ui :: proc() {
 		str = string(result_hp)
 		target_string : string =  strings.concatenate({"target : ", ctx.gs.current_target.name, " (", result_hp, "HP)"})
 		draw.draw_text({screen_x - 400, screen_y - 650}, target_string, z_layer=.ui, pivot=Pivot.top_left)
+	}
+
+	// DEBUG_ENTITY
+	screen_x, screen_y = screen_pivot(.top_right)
+	if DEBUG_ENTITY != nil {
+		target_string : string =  strings.concatenate({"DEBUG : ", DEBUG_ENTITY.name})
+		draw.draw_text({screen_x - 400, screen_y - 700}, target_string, z_layer=.ui, pivot=Pivot.top_left)
 	}
 
 	// CONSOLE
@@ -1216,13 +1231,47 @@ setup_ai :: proc(using e: ^Entity) {
 		pos := mouse_pos_in_current_space()
 		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
 			ctx.gs.force_hint_text = e.name
+			if input.key_pressed(.LEFT_MOUSE) {
+				DEBUG_ENTITY = e
+			}
 		}
 
 		if e.in_discussion {
 			return
 		}
 
-		if e.can_move == false {
+		if e.move_to_path {
+			if e.can_move == false {
+				e.time_to_move -= ctx.delta_t
+				if e.time_to_move <= 0 {
+					e.time_to_move = 0
+					e.can_move = true	
+				}
+			}
+			else {
+				e.parent_entity.can_be_interact_with = false
+				e.parent_entity.child_entity =  nil
+				
+				e.x = e.path[e.path_index].x
+				e.y = e.path[e.path_index].y
+				e.pos.x = f32(e.x) * 16
+				e.pos.y = starting_y + f32(e.y) * 16
+				e.path_index += 1
+				if e.path_index >= len(e.path) {
+					//e.move_to_path = false
+					e.path_index = 0
+					e.path = move_to(e, ctx.gs.all_interest_points[rand.int31_max(i32(len(ctx.gs.all_interest_points)))])
+				}
+				e.parent_entity = ctx.gs.all_cells_entity[int(e.y) * TILE_WIDTH + int(e.x)]
+				e.parent_entity.can_be_interact_with = true
+				e.parent_entity.child_entity = e
+				e.time_to_move = 0.5
+				e.can_move = false
+			}
+			return
+		}
+
+		/*if e.can_move == false {
 			e.time_to_move -= ctx.delta_t
 			if e.time_to_move <= 0 {
 				e.time_to_move = 0
@@ -1273,7 +1322,7 @@ setup_ai :: proc(using e: ^Entity) {
 			e.parent_entity.child_entity = e
 			e.time_to_move = 0.5
 			e.can_move = false
-		}
+		}*/
 	}
 
 	e.draw_proc = proc(e: Entity) {
@@ -1297,6 +1346,17 @@ setup_dot :: proc(using e: ^Entity) {
 
 	e.name = "dot"
 	e.sprite = .dot;
+
+	e.update_proc = proc(e: ^Entity) {
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			if input.key_pressed(.RIGHT_MOUSE) && DEBUG_ENTITY != nil {
+				DEBUG_ENTITY.path = move_to(DEBUG_ENTITY, e)
+				DEBUG_ENTITY.move_to_path = true
+				DEBUG_ENTITY.path_index = 0
+			}
+		}
+	}
 
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
@@ -1326,6 +1386,11 @@ setup_door :: proc(using e: ^Entity) {
 				str := string(result)
 				ctx.gs.force_hint_text = strings.concatenate({"Building ", str})
 			}
+			if input.key_pressed(.RIGHT_MOUSE) && DEBUG_ENTITY != nil {
+				DEBUG_ENTITY.path = move_to(DEBUG_ENTITY, e)
+				DEBUG_ENTITY.move_to_path = true
+				DEBUG_ENTITY.path_index = 0
+			}
 		}
 	}
 
@@ -1342,6 +1407,8 @@ setup_stairs_up :: proc(using e: ^Entity) {
 	e.special_tile = true
 	e.on_trigger_tile = true
 
+	append(&ctx.gs.all_interest_points, e)
+
 	e.draw_proc = proc(e: Entity) {
 		draw_entity_default(e)
 	}
@@ -1352,6 +1419,7 @@ setup_restaurant :: proc(using e: ^Entity) {
 
 	e.name = "restaurant"
 	e.sprite = .restaurant;
+	append(&ctx.gs.all_interest_points, e)
 
 	e.update_proc = proc(e: ^Entity) {
 		pos := mouse_pos_in_current_space()
@@ -1370,6 +1438,7 @@ setup_police :: proc(using e: ^Entity) {
 
 	e.name = "police"
 	e.sprite = .police;
+	append(&ctx.gs.all_interest_points, e)
 
 	e.update_proc = proc(e: ^Entity) {
 		pos := mouse_pos_in_current_space()
@@ -1389,6 +1458,7 @@ setup_work_selection :: proc(using e: ^Entity) {
 	e.name = "work selection"
 	e.sprite = .work_selection;
 	e.can_be_interact_with = true
+	append(&ctx.gs.all_interest_points, e)
 
 	e.update_proc = proc(e: ^Entity) {
 		pos := mouse_pos_in_current_space()
@@ -1479,7 +1549,7 @@ move_time :: proc() {
 	}
 }
 
-// COMMANDE
+// COMMAND
 
 analyse_command :: proc(command: string) {
 	ss := strings.split(command, " ")
@@ -1553,4 +1623,178 @@ analyse_command :: proc(command: string) {
 			}
 		}
 	}
+}
+
+move_to :: proc(ai: ^Entity, target: ^Entity) -> [dynamic]^Entity{
+	to_return: [dynamic]^Entity
+
+	to_explore: [dynamic]^path_find_cell
+	explored: [dynamic]^Entity
+	
+	final: [dynamic]^path_find_cell
+
+	starting_cell := ai.parent_entity
+	previous_cell := starting_cell
+	last_path_find_cell := new(path_find_cell)
+	last_path_find_cell.comes_from = nil
+	last_path_find_cell.linked_entity = starting_cell
+	last_path_find_cell.weight = 1
+	current_cell: ^path_find_cell = last_path_find_cell
+
+	new_path_find_cell := new(path_find_cell)
+	new_path_find_cell.comes_from = last_path_find_cell
+	new_path_find_cell.linked_entity = ctx.gs.all_cells_entity[int(starting_cell.y) * TILE_WIDTH + int(starting_cell.x + 1)]
+	append(&to_explore, new_path_find_cell)
+
+	new_path_find_cell = new(path_find_cell)
+	new_path_find_cell.comes_from = last_path_find_cell
+	new_path_find_cell.linked_entity = ctx.gs.all_cells_entity[int(starting_cell.y) * TILE_WIDTH + int(starting_cell.x - 1)]
+	append(&to_explore, new_path_find_cell)
+
+	new_path_find_cell = new(path_find_cell)
+	new_path_find_cell.comes_from = last_path_find_cell
+	new_path_find_cell.linked_entity = ctx.gs.all_cells_entity[int(starting_cell.y - 1) * TILE_WIDTH + int(starting_cell.x)]
+	append(&to_explore, new_path_find_cell)
+
+	new_path_find_cell = new(path_find_cell)
+	new_path_find_cell.comes_from = last_path_find_cell
+	new_path_find_cell.linked_entity = ctx.gs.all_cells_entity[int(starting_cell.y + 1) * TILE_WIDTH + int(starting_cell.x)]
+	append(&to_explore, new_path_find_cell)
+
+	for {
+		if current_cell.linked_entity == target || len(to_explore) <= 0 
+		{
+			break
+		}
+
+		current_cell = to_explore[0]
+
+		if current_cell.linked_entity == target
+		{
+			new_path: ^path_find_cell = new(path_find_cell)
+			new_path.comes_from = current_cell
+			new_path.linked_entity = target
+			new_path.weight = current_cell.weight
+			append(&final, new_path)
+			break
+		}
+
+		distance := bald_user.dist(target.pos, current_cell.linked_entity.pos)
+		index_to_remove := 0
+		i := 0
+		for single_cell in to_explore {
+			distance_bis := bald_user.dist(target.pos, single_cell.linked_entity.pos)
+			if distance_bis < distance {
+				current_cell = single_cell
+				distance = distance_bis
+				index_to_remove = i
+			}
+			i += 1
+		}
+
+		append(&explored, current_cell.linked_entity)
+		ordered_remove(&to_explore, index_to_remove)
+
+		append(&final, current_cell)
+
+		to_check: ^Entity = nil
+		if int(current_cell.linked_entity.y) * TILE_WIDTH + int(current_cell.linked_entity.x + 1) > 0 {
+			to_check = ctx.gs.all_cells_entity[int(current_cell.linked_entity.y) * TILE_WIDTH + int(current_cell.linked_entity.x + 1)]
+			if !contains_entity_from_path_find_cell(to_explore, to_check) && !contains_entity(explored, to_check) {
+				if to_check.kind != .wall {
+					new_path_find_cell = new(path_find_cell)
+					new_path_find_cell.comes_from = current_cell
+					new_path_find_cell.linked_entity = to_check
+					append(&to_explore, new_path_find_cell)
+				}
+			}
+		}
+
+		if int(current_cell.linked_entity.y) * TILE_WIDTH + int(current_cell.linked_entity.x - 1) > 0 {
+			to_check = ctx.gs.all_cells_entity[int(current_cell.linked_entity.y) * TILE_WIDTH + int(current_cell.linked_entity.x - 1)]
+			if !contains_entity_from_path_find_cell(to_explore, to_check) && !contains_entity(explored, to_check) {
+				if to_check.kind != .wall {
+					new_path_find_cell = new(path_find_cell)
+					new_path_find_cell.comes_from = current_cell
+					new_path_find_cell.linked_entity = to_check
+					append(&to_explore, new_path_find_cell)
+				}
+			}
+		}
+
+		if int(current_cell.linked_entity.y - 1) * TILE_WIDTH + int(current_cell.linked_entity.x) > 0 {
+			to_check = ctx.gs.all_cells_entity[int(current_cell.linked_entity.y - 1) * TILE_WIDTH + int(current_cell.linked_entity.x)]
+			if !contains_entity_from_path_find_cell(to_explore, to_check) && !contains_entity(explored, to_check) {
+				if to_check.kind != .wall {
+					new_path_find_cell = new(path_find_cell)
+					new_path_find_cell.comes_from = current_cell
+					new_path_find_cell.linked_entity = to_check
+					append(&to_explore, new_path_find_cell)
+				}
+			}
+		}
+		
+		if int(current_cell.linked_entity.y + 1) * TILE_WIDTH + int(current_cell.linked_entity.x) > 0 {
+			to_check = ctx.gs.all_cells_entity[int(current_cell.linked_entity.y + 1) * TILE_WIDTH + int(current_cell.linked_entity.x)]
+			if !contains_entity_from_path_find_cell(to_explore, to_check) && !contains_entity(explored, to_check) {
+				if to_check.kind != .wall {
+					new_path_find_cell = new(path_find_cell)
+					new_path_find_cell.comes_from = current_cell
+					new_path_find_cell.linked_entity = to_check
+					append(&to_explore, new_path_find_cell)
+				}
+			}
+		}
+	}
+
+	inverted: [dynamic]^path_find_cell
+	if current_cell.linked_entity == target {
+		examined_cell := final[len(final) - 1]
+		append(&inverted, examined_cell)
+		for {
+			if examined_cell.linked_entity == starting_cell {
+				break
+			}
+			append(&inverted, examined_cell.comes_from)
+			examined_cell = examined_cell.comes_from
+			
+		}
+	}
+	else {
+		log.debug("cannot reach the path")
+	}
+
+	for i := len(inverted) -1 ; i >= 0; i -= 1 {
+		append(&to_return, inverted[i].linked_entity)
+	}
+
+	return to_return
+}
+
+//
+// Pathfind
+path_find_cell :: struct {
+	comes_from: ^path_find_cell,
+	linked_entity: ^Entity,
+	weight: int,
+}
+
+contains_entity :: proc(array: [dynamic]^Entity, e: ^Entity) -> bool{
+	for entity in array {
+		if entity  == e {
+			return true
+		}
+	}
+
+	return false
+}
+
+contains_entity_from_path_find_cell :: proc(array: [dynamic]^path_find_cell, e: ^Entity) -> bool{
+	for entity in array {
+		if entity.linked_entity  == e {
+			return true
+		}
+	}
+
+	return false
 }

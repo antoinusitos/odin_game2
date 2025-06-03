@@ -235,3 +235,8 @@ Matrix4 :: linalg.Matrix4f32
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
+
+import "core:math"
+dist :: proc(a: Vec2, b: Vec2) -> f32 {
+	return math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - b.y) * (b.y - b.y))
+}
