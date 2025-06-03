@@ -104,6 +104,8 @@ Game_State :: struct {
 	current_weapon: ^Entity,
 	current_target: ^Entity,
 
+	work_selecting: bool,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -237,6 +239,7 @@ Entity_Kind :: enum {
 	stairs_up,
 	restaurant,
 	police,
+	work_selection,
 
 	//items
 	lockpick,
@@ -269,6 +272,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .baton: setup_baton(e)
 		case .restaurant: setup_restaurant(e)
 		case .police: setup_police(e)
+		case .work_selection: setup_work_selection(e)
 	}
 }
 
@@ -460,6 +464,16 @@ game_ui :: proc() {
 
 		draw.draw_text({screen_x + 2 - 150, 720 / 2 + 100}, "1 - Nothing", z_layer=.ui, pivot=Pivot.top_left)
 	}
+
+	// WORK SELECTION
+	if ctx.gs.work_selecting {
+		screen_x, screen_y = screen_pivot(.top_center)
+		xform := Matrix4(1)
+		xform *= utils.xform_translate(Vec2({640 - 150, 720 / 2 - 150}))
+			
+		draw.draw_rect_xform(xform, Vec2({300, 300}), col=Vec4{0.2,0.2,0.2,1})
+		draw.draw_text({screen_x + 2, 720 / 2 + 150}, "Work Selection", z_layer=.ui, pivot=Pivot.top_center)
+	}
 }
 
 main_menu_init :: proc() {
@@ -568,6 +582,11 @@ game_init :: proc() {
 		}
 		else if id == 897 {
 			p = entity_create(.police)
+			ctx.gs.all_cells_entity[i] = p
+		}
+		else if id == 493 {
+			p = entity_create(.work_selection)
+			ctx.gs.all_cells[i] = true
 			ctx.gs.all_cells_entity[i] = p
 		}
 		else {
@@ -1115,6 +1134,10 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			ctx.gs.current_target = tile
 		}
 	}
+	else if cell.kind == .work_selection {
+		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
+		ctx.gs.work_selecting = true
+	}
 	else {
 		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
 	}
@@ -1334,7 +1357,7 @@ setup_door :: proc(using e: ^Entity) {
 	e.door_level = bald_user.Door_Level(random)
 
 	e.update_proc = proc(e: ^Entity) {
-		if ctx.gs.time_hour >= 10 && e.door_state == bald_user.Door_State.Open && !e.unlocked{
+		if ctx.gs.time_hour >= 20 && e.door_state == bald_user.Door_State.Open && !e.unlocked{
 			e.door_state = bald_user.Door_State.Locked
 			e.sprite = .door_closed
 			ctx.gs.all_cells[int(e.y) * TILE_WIDTH + int(e.x)] = true
@@ -1382,6 +1405,25 @@ setup_police :: proc(using e: ^Entity) {
 
 	e.name = "police"
 	e.sprite = .police;
+
+	e.update_proc = proc(e: ^Entity) {
+		pos := mouse_pos_in_current_space()
+		if pos.x > e.pos.x - 8 && pos.x < e.pos.x + 8 && pos.y > e.pos.y && pos.y < e.pos.y + 16 {
+			ctx.gs.force_hint_text = e.name
+		}
+	}
+
+	e.draw_proc = proc(e: Entity) {
+		draw_entity_default(e)
+	}
+}
+
+setup_work_selection :: proc(using e: ^Entity) {
+	e.kind = .work_selection
+
+	e.name = "work selection"
+	e.sprite = .work_selection;
+	e.can_be_interact_with = true
 
 	e.update_proc = proc(e: ^Entity) {
 		pos := mouse_pos_in_current_space()

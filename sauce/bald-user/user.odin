@@ -97,6 +97,7 @@ Sprite_Name :: enum {
 	stairs_up,
 	restaurant,
 	police,
+	work_selection,
 }
 
 sprite_data: [Sprite_Name]Sprite_Data = #partial {
