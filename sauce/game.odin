@@ -45,6 +45,7 @@ starting_y : f32 = 16 * 5
 game_state_name := Game_State_Name.game
 
 DEBUG_HINTS := false
+DEBUG_PATHFIND := true
 
 DEBUG_ENTITY : ^Entity = nil
 
@@ -108,10 +109,14 @@ Game_State :: struct {
 	current_weapon: ^Entity,
 	current_target: ^Entity,
 
-	work_selecting: bool,
+	// Widget
+	dialog_text: [dynamic]string,
 
 	// quests
 	all_quests: [dynamic]bald_user.Quest,
+	quest_available: [dynamic]bald_user.Quest,
+	selecting_quest: bool,
+	current_quest: bald_user.Quest,
 
 	scratch: struct {
 		all_entities: []Entity_Handle,
@@ -384,15 +389,14 @@ game_ui :: proc() {
 
 	// ACTIONS
 	screen_x, screen_y = screen_pivot(.top_right)
-	action_index := 0
-	for action_it_index := len(ctx.gs.last_actions) - 1; action_it_index >= 0; action_it_index -= 1 {
-		if len(ctx.gs.last_actions) > action_it_index {
-			draw.draw_text({screen_x - 240, screen_y - 80 - f32(action_index * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left, scale= 0.85)
-			action_index += 1
-			if action_index >= 37 {
-				break
-			}
-		}
+	action_it := 0
+	if len(ctx.gs.last_actions) > 37 {
+		action_it = len(ctx.gs.last_actions) - 37
+	}
+	y := 0
+	for action_it_index := action_it; action_it_index < len(ctx.gs.last_actions); action_it_index += 1 {
+		draw.draw_text({screen_x - 240, screen_y - 80 - f32(y * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left, scale= 0.85)
+		y += 1
 	}
 
 	// DATE
@@ -428,7 +432,7 @@ game_ui :: proc() {
 			xform := Matrix4(1)
 			xform *= utils.xform_translate(hint.pos - Vec2({-8, 15}))
 			
-			draw.draw_rect_xform(xform, hint.size, col=Vec4{0,1,0,0.8})
+			draw.draw_rect_xform(xform, hint.size, col=Vec4{0,1,0,0.8}, z_layer=.ui)
 		}
 	}
 
@@ -446,6 +450,17 @@ game_ui :: proc() {
 	if DEBUG_ENTITY != nil {
 		target_string : string =  strings.concatenate({"DEBUG : ", DEBUG_ENTITY.name})
 		draw.draw_text({screen_x - 400, screen_y - 700}, target_string, z_layer=.ui, pivot=Pivot.top_left)
+
+		// DEBUG_PATHFIND
+		if DEBUG_PATHFIND {
+			for tile in DEBUG_ENTITY.path {
+				screen_x, screen_y = screen_pivot(.bottom_left)
+				xform := Matrix4(1)
+				xform *= utils.xform_translate(tile.pos + Vec2{4, 0})
+					
+				draw.draw_rect_xform(xform, Vec2({8, 8}), col=Vec4{0,1,0,1})
+			}
+		}
 	}
 
 	// CONSOLE
@@ -454,7 +469,7 @@ game_ui :: proc() {
 		xform := Matrix4(1)
 		xform *= utils.xform_translate(Vec2({0, 0}))
 			
-		draw.draw_rect_xform(xform, Vec2({f32(window_w), 20}), col=Vec4{0.2,0.2,0.2,1})
+		draw.draw_rect_xform(xform, Vec2({f32(window_w), 20}), col=Vec4{0.2,0.2,0.2,1}, z_layer=.ui)
 		draw.draw_text({screen_x + 2, screen_y + 15}, CONSOLE_TEXT, z_layer=.ui, pivot=Pivot.top_left)
 	}
 
@@ -462,24 +477,29 @@ game_ui :: proc() {
 	if get_player().in_discussion {
 		screen_x, screen_y = screen_pivot(.top_center)
 		xform := Matrix4(1)
-		xform *= utils.xform_translate(Vec2({640 - 150, 720 / 2 - 150}))
-			
-		draw.draw_rect_xform(xform, Vec2({300, 300}), col=Vec4{0.2,0.2,0.2,1})
-		draw.draw_text({screen_x + 2, 720 / 2 + 150}, "What do you want ?", z_layer=.ui, pivot=Pivot.top_center)
+		xform *= utils.xform_translate(Vec2({640 - 250, 720 / 2 - 250}))
 
-		draw.draw_text({screen_x + 2 - 150, 720 / 2 + 100}, "1 - Nothing", z_layer=.ui, pivot=Pivot.top_left)
-	}
-
-	// WORK SELECTION
-	if ctx.gs.work_selecting {
-		screen_x, screen_y = screen_pivot(.top_center)
-		xform := Matrix4(1)
-		xform *= utils.xform_translate(Vec2({640 - 150, 720 / 2 - 150}))
-			
-		draw.draw_rect_xform(xform, Vec2({300, 300}), col=Vec4{0.2,0.2,0.2,1})
-		draw.draw_text({screen_x + 2, 720 / 2 + 150}, "Work Selection", z_layer=.ui, pivot=Pivot.top_center)
+		draw.draw_rect_xform(xform, Vec2({500, 500}), col=color.BLACK, z_layer=.ui)
 		
-		draw.draw_text({screen_x + 2 - 150, 720 / 2 + 100}, strings.concatenate({"1 - start ", ctx.gs.all_quests[0].name}), z_layer=.ui, pivot=Pivot.top_left)
+		if ctx.gs.selecting_quest {
+			draw.draw_text({screen_x + 2 - 250, 720 / 2 + 100}, "Select case :", z_layer=.ui, pivot=Pivot.top_left)
+			i := 1
+			for quest in ctx.gs.quest_available {
+				result_index := strconv.itoa(buf[:], i)
+				str = string(result_index)
+				draw.draw_text({screen_x + 2 - 250, 720 / 2 + 100 - f32(i * 20)}, strings.concatenate({str, " - ", quest.name}), z_layer=.ui, pivot=Pivot.top_left)
+				i += 1
+			}
+			draw.draw_text({screen_x + 2 - 250, 720 / 2 + 100 - f32(i * 20)}, "Press E to close", z_layer=.ui, pivot=Pivot.top_left)
+			
+		}
+		else {
+			i := 0
+			for text in ctx.gs.dialog_text {
+				draw.draw_text({screen_x + 2 - 250, 720 / 2 + 80 - f32(i * 20)}, text, z_layer=.ui, pivot=Pivot.top_left)
+				i += 1
+			}
+		}
 	}
 }
 
@@ -679,6 +699,15 @@ game_init :: proc() {
 
 	// hints
 	init_hints()
+
+	get_player().in_discussion = true
+	append(&ctx.gs.dialog_text, "Hello inspector, welcome to town !")
+	append(&ctx.gs.dialog_text, "a case is waiting for you on the board")
+	append(&ctx.gs.dialog_text, "")
+	append(&ctx.gs.dialog_text, "")
+	append(&ctx.gs.dialog_text, "note : the game encourage you to take note with a pen and a paper")
+	append(&ctx.gs.dialog_text, "")
+	append(&ctx.gs.dialog_text, "Press E to close")
 }
 
 init_hints :: proc() {
@@ -787,7 +816,7 @@ game_update :: proc() {
 	}
 
 	rebuild_scratch_helpers()
-	
+
 	ctx.gs.force_hint_text = ""
 	// big :update time
 	for handle in get_all_ents() {
@@ -829,19 +858,6 @@ game_update :: proc() {
 	}
 	if input.key_pressed(.ESC) {
 		sapp.request_quit()
-	}
-	if get_player().in_discussion {
-		if input.key_pressed(._1) {
-			get_player().in_discussion = false
-			ctx.gs.current_target.in_discussion = false
-			ctx.gs.current_target = nil
-		}
-	}
-	if ctx.gs.work_selecting {
-		if input.key_pressed(._1) {
-			ctx.gs.work_selecting = false
-			append(&ctx.gs.last_actions, strings.concatenate({"started quest : ", ctx.gs.all_quests[0].name}))
-		}
 	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
@@ -996,8 +1012,21 @@ setup_player :: proc(e: ^Entity) {
 			return
 		}
 
-		if e.in_discussion || ctx.gs.work_selecting{
-			return 
+		if get_player().in_discussion {
+			if ctx.gs.selecting_quest {
+				if input.key_pressed(._1) && len(ctx.gs.quest_available) > 0 {
+					ctx.gs.current_quest = ctx.gs.quest_available[0]
+					append(&ctx.gs.last_actions, strings.concatenate({"Started quest : ", ctx.gs.current_quest.name}))
+					get_player().in_discussion = false
+					ctx.gs.selecting_quest = false
+					return
+				}
+			}
+
+			if is_action_pressed(.interact) {
+				get_player().in_discussion = false
+			}
+			return
 		}
 
 		if e.can_move == false {
@@ -1053,7 +1082,7 @@ setup_player :: proc(e: ^Entity) {
 				entity_set_animation(e, .player_run, 0.1)
 				if moved {
 					e.can_move = false
-					e.time_to_move = 0.5
+					e.time_to_move = 0.1
 					move_time()
 				}
 			}
@@ -1192,11 +1221,18 @@ interact_with_cell :: proc(e: ^Entity, cell: ^Entity, index: int) {
 			get_player().in_discussion = true
 			tile.in_discussion = true
 			ctx.gs.current_target = tile
+			clear(&ctx.gs.dialog_text)
+			append(&ctx.gs.dialog_text, "What do you want ?")
+			append(&ctx.gs.dialog_text, "")
+			append(&ctx.gs.dialog_text, "Press E to close")
 		}
 	}
 	else if cell.kind == .work_selection {
+		clear(&ctx.gs.quest_available)
+		append(&ctx.gs.quest_available, ctx.gs.all_quests[0])
+		ctx.gs.selecting_quest = true
 		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
-		ctx.gs.work_selecting = true
+		get_player().in_discussion = true
 	}
 	else {
 		append(&ctx.gs.last_actions, strings.concatenate({"Inspected : ", cell.name}))
@@ -1270,59 +1306,6 @@ setup_ai :: proc(using e: ^Entity) {
 			}
 			return
 		}
-
-		/*if e.can_move == false {
-			e.time_to_move -= ctx.delta_t
-			if e.time_to_move <= 0 {
-				e.time_to_move = 0
-				e.can_move = true	
-			}
-		}
-		else {
-			e.parent_entity.can_be_interact_with = false
-			e.parent_entity.child_entity =  nil
-			if e.last_movement == Input_Action.left {
-				e.pos.x -= 16
-				e.x -= 1
-				e.movement_total += 1
-				if e.movement_total >= 2 {
-					e.movement_total = 0
-					e.last_movement = Input_Action.down
-				}
-			}
-			else if e.last_movement == Input_Action.down {
-				e.pos.y -= 16
-				e.y -= 1
-				e.movement_total += 1
-				if e.movement_total >= 2 {
-					e.movement_total = 0
-					e.last_movement = Input_Action.right
-				}
-			}
-			else if e.last_movement == Input_Action.right {
-				e.pos.x += 16
-				e.x += 1
-				e.movement_total += 1
-				if e.movement_total >= 2 {
-					e.movement_total = 0
-					e.last_movement = Input_Action.up
-				}
-			}
-			else if e.last_movement == Input_Action.up {
-				e.pos.y += 16
-				e.y += 1
-				e.movement_total += 1
-				if e.movement_total >= 2 {
-					e.movement_total = 0
-					e.last_movement = Input_Action.left
-				}
-			}
-			e.parent_entity = ctx.gs.all_cells_entity[int(e.y) * TILE_WIDTH + int(e.x)]
-			e.parent_entity.can_be_interact_with = true
-			e.parent_entity.child_entity = e
-			e.time_to_move = 0.5
-			e.can_move = false
-		}*/
 	}
 
 	e.draw_proc = proc(e: Entity) {
@@ -1797,4 +1780,11 @@ contains_entity_from_path_find_cell :: proc(array: [dynamic]^path_find_cell, e: 
 	}
 
 	return false
+}
+
+// 
+// Quest
+
+start_quest :: proc() {
+
 }
