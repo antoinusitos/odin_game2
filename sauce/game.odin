@@ -119,6 +119,10 @@ Game_State :: struct {
 	selecting_quest: bool,
 	current_quest: bald_user.Quest,
 
+	//inventory
+	inventory_open: bool,
+	inventory_desc: string,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -178,6 +182,7 @@ Entity :: struct {
   	loop: bool,
   	frame_duration: f32,
 	name: string,
+	description: string,
 
 	can_move: bool,
 	time_to_move: f32,
@@ -224,6 +229,7 @@ Entity :: struct {
 	
 	// inventory
 	inventory: [dynamic]^Entity,
+	inventory_hover: bool,
 
 	// item
 	value_min: int,
@@ -256,6 +262,7 @@ Entity_Kind :: enum {
 	//items
 	lockpick,
 	baton,
+	note,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -274,6 +281,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .stairs_up: setup_stairs_up(e)
 		case .lockpick: setup_lockpick(e)
 		case .baton: setup_baton(e)
+		case .note: setup_note(e)
 		case .restaurant: setup_restaurant(e)
 		case .police: setup_police(e)
 		case .work_selection: setup_work_selection(e)
@@ -503,13 +511,57 @@ game_ui :: proc() {
 		}
 	}
 
+	// INVENTORY
+	if ctx.gs.inventory_open {
+		screen_x, screen_y = screen_pivot(.top_center)
+		xform := Matrix4(1)
+		xform *= utils.xform_translate(Vec2({640 - 250, 720 / 2 - 250}))
+
+		draw.draw_rect_xform(xform, Vec2({500, 500}), col=Vec4({0.2, 0.2, 0.2, 1}), z_layer=.ui)
+
+		draw.draw_text({screen_x, screen_y - 125}, "Inventory", z_layer=.ui, pivot=Pivot.top_center)
+
+		xform = Matrix4(1)
+		xform *= utils.xform_translate(Vec2({640 + 275, 720 / 2 - 250}))
+
+		draw.draw_rect_xform(xform, Vec2({300, 500}), col=Vec4({0.2, 0.2, 0.2, 1}), z_layer=.ui)
+		draw.draw_text({screen_x + 275 + 150, screen_y - 125}, "Details", z_layer=.ui, pivot=Pivot.top_center)
+
+		for i := 0; i < 6; i += 1 {
+			for j := 0; j < 8; j += 1 {
+				if len(get_player().inventory) > i * 8 + j && get_player().inventory[i * 8 + j].inventory_hover {
+					xform = Matrix4(1)
+					xform *= utils.xform_translate(Vec2({640 - 250 + 10 + f32(j * 50 + j * 10), 720 / 2 + 150 - f32(i * 50 + i * 10)}))
+					draw.draw_rect_xform(xform, Vec2({50, 50}), col=Vec4({1, 0, 0, 1}), z_layer=.ui)
+				}
+				else {
+					xform = Matrix4(1)
+					xform *= utils.xform_translate(Vec2({640 - 250 + 10 + f32(j * 50 + j * 10), 720 / 2 + 150 - f32(i * 50 + i * 10)}))
+					draw.draw_rect_xform(xform, Vec2({50, 50}), col=Vec4({0, 0, 0, 1}), z_layer=.ui)
+				}
+				if len(get_player().inventory) > i * 8 + j {
+					xform = Matrix4(1)
+					xform *= utils.xform_translate(Vec2({640 - 250 + 10 + f32(j * 50 + j * 10), 720 / 2 + 150 - f32(i * 50 + i * 10)}))
+					draw.draw_rect_xform(xform, Vec2({50, 50}), col=Vec4({1, 1, 1, 1}), z_layer=.ui, sprite = get_player().inventory[i * 8 + j].sprite)
+				}
+			}
+		}
+
+		draw.draw_text({screen_x + 275 + 150, screen_y - 200}, ctx.gs.inventory_desc, z_layer=.ui, pivot=Pivot.top_center)
+		
+	}
+
 	// BUTTONS
 	for button in ctx.gs.bottom_buttons {
 		screen_x, screen_y = screen_pivot(.bottom_left)
 		xform := Matrix4(1)
 		xform *= utils.xform_translate(button.pos)
 
-		draw.draw_rect_xform(xform, button.size, col=button.color, z_layer=.ui)
+		button_color := button.color
+		if button.hover {
+			button_color = color.RED
+		}
+		draw.draw_rect_xform(xform, button.size, col=button_color, z_layer=.ui)
 		draw.draw_text(button.pos + Vec2{10, button.size.y / 2 - 5}, button.text, z_layer=.ui, pivot=Pivot.bottom_left)
 	}
 }
@@ -696,6 +748,7 @@ game_init :: proc() {
 	}
 
 	player := entity_create(.player)
+	
 	ctx.gs.player_handle = player.handle
 	player.pos = Vec2{16, starting_y + 16}
 
@@ -849,10 +902,20 @@ game_update :: proc() {
 		}
 	}
 
+	pos := mouse_pos_in_current_space()
+	// BUTTONS HOVER
+	for &button in ctx.gs.bottom_buttons {
+		if pos.x > button.pos.x && pos.x < button.pos.x + button.size.x && pos.y > button.pos.y && pos.y < button.pos.y + button.size.y {
+			button.hover = true
+		}
+		else {
+			button.hover = false
+		}
+	}
+
 	if input.key_pressed(.LEFT_MOUSE) {
 		input.consume_key_pressed(.LEFT_MOUSE)
 
-		pos := mouse_pos_in_current_space()
 		log.info("schloop at", pos)
 		sound.play("event:/schloop", pos=pos)
 
@@ -860,6 +923,7 @@ game_update :: proc() {
 		for button in ctx.gs.bottom_buttons {
 			if pos.x > button.pos.x && pos.x < button.pos.x + button.size.x && pos.y > button.pos.y && pos.y < button.pos.y + button.size.y {
 				log.info("inventory")
+				ctx.gs.inventory_open = !ctx.gs.inventory_open
 			}
 		}
 	}
@@ -1035,6 +1099,35 @@ setup_player :: proc(e: ^Entity) {
 
 	e.update_proc = proc(e: ^Entity) {
 
+		if ctx.gs.inventory_open {
+			pos := mouse_pos_in_current_space()
+			found := false
+			for i := 0; i < 6; i += 1 {
+				for j := 0; j < 8; j += 1 {
+					if len(get_player().inventory) > i * 8 + j {
+						temp_pos := Vec2({640 - 250 + 10 + f32(j * 50 + j * 10), 720 / 2 + 200 - f32(i * 50 + i * 10)})
+						if pos.x >= temp_pos.x && pos.x <= temp_pos.x + 50 &&
+							pos.y <= temp_pos.y && pos.y >= temp_pos.y - 50 {
+							
+							get_player().inventory[i * 8 + j].inventory_hover = true
+							if get_player().inventory[i * 8 + j].kind == .note {
+								found = true
+								ctx.gs.inventory_desc = get_player().inventory[i * 8 + j].description
+								
+							}
+						}
+						else {
+							get_player().inventory[i * 8 + j].inventory_hover = false
+						}
+					}
+				}
+			}
+
+			if !found {
+				ctx.gs.inventory_desc = ""
+			}
+		}
+
 		if CONSOLE_COMMAND {
 			return
 		}
@@ -1045,6 +1138,9 @@ setup_player :: proc(e: ^Entity) {
 					ctx.gs.current_quest = ctx.gs.quest_available[0]
 					append(&ctx.gs.last_actions, strings.concatenate({"Started quest : ", ctx.gs.current_quest.name}))
 					append(&ctx.gs.last_actions, strings.concatenate({"A note was added to your inventory"}))
+					note := entity_create(.note)
+					note.description = "A murder was commited in building 5."
+					append(&get_player().inventory, note)
 					get_player().in_discussion = false
 					ctx.gs.selecting_quest = false
 					return
@@ -1492,6 +1588,7 @@ setup_lockpick :: proc(using e: ^Entity) {
 	e.name = "lockpick"
 	e.max_health = 100
 	e.current_health = e.max_health
+	e.sprite = .player_tile3
 }
 
 setup_baton :: proc(using e: ^Entity) {
@@ -1500,6 +1597,13 @@ setup_baton :: proc(using e: ^Entity) {
 	e.name = "baton"
 	e.value_min = 1
 	e.value_max = 3
+}
+
+setup_note :: proc(using e: ^Entity) {
+	e.kind = .note
+
+	e.name = "note"
+	e.sprite = .player_tile2
 }
 
 //

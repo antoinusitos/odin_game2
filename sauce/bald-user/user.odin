@@ -231,6 +231,7 @@ button_ui :: struct {
 	size: Vec2,
 	text: string,
 	color: Vec4,
+	hover: bool,
 }
 
 
