@@ -226,6 +226,13 @@ hint_ui :: struct {
 	text: string,
 }
 
+button_ui :: struct {
+	pos: Vec2,
+	size: Vec2,
+	text: string,
+	color: Vec4,
+}
+
 
 //
 // helpers

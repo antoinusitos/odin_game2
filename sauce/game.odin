@@ -111,6 +111,7 @@ Game_State :: struct {
 
 	// Widget
 	dialog_text: [dynamic]string,
+	bottom_buttons: [dynamic]bald_user.button_ui,
 
 	// quests
 	all_quests: [dynamic]bald_user.Quest,
@@ -395,7 +396,7 @@ game_ui :: proc() {
 	}
 	y := 0
 	for action_it_index := action_it; action_it_index < len(ctx.gs.last_actions); action_it_index += 1 {
-		draw.draw_text({screen_x - 240, screen_y - 80 - f32(y * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left, scale= 0.85)
+		draw.draw_text({screen_x - 238, screen_y - 80 - f32(y * 15)}, ctx.gs.last_actions[action_it_index], z_layer=.ui, pivot=Pivot.top_left, scale= 0.85)
 		y += 1
 	}
 
@@ -500,6 +501,16 @@ game_ui :: proc() {
 				i += 1
 			}
 		}
+	}
+
+	// BUTTONS
+	for button in ctx.gs.bottom_buttons {
+		screen_x, screen_y = screen_pivot(.bottom_left)
+		xform := Matrix4(1)
+		xform *= utils.xform_translate(button.pos)
+
+		draw.draw_rect_xform(xform, button.size, col=button.color, z_layer=.ui)
+		draw.draw_text(button.pos + Vec2{10, button.size.y / 2 - 5}, button.text, z_layer=.ui, pivot=Pivot.bottom_left)
 	}
 }
 
@@ -700,6 +711,7 @@ game_init :: proc() {
 	// hints
 	init_hints()
 
+	// intro
 	get_player().in_discussion = true
 	append(&ctx.gs.dialog_text, "Hello inspector, welcome to town !")
 	append(&ctx.gs.dialog_text, "a case is waiting for you on the board")
@@ -708,6 +720,14 @@ game_init :: proc() {
 	append(&ctx.gs.dialog_text, "note : the game encourage you to take note with a pen and a paper")
 	append(&ctx.gs.dialog_text, "")
 	append(&ctx.gs.dialog_text, "Press E to close")
+
+	// buttons
+	inventory_button := bald_user.button_ui({})
+	inventory_button.pos = Vec2{0, 0}
+	inventory_button.size = Vec2{100, 30}
+	inventory_button.text = "Inventory"
+	inventory_button.color = Vec4{0.2, 0.2, 0.2, 1}
+	append(&ctx.gs.bottom_buttons, inventory_button)
 }
 
 init_hints :: proc() {
@@ -835,6 +855,13 @@ game_update :: proc() {
 		pos := mouse_pos_in_current_space()
 		log.info("schloop at", pos)
 		sound.play("event:/schloop", pos=pos)
+
+		// BUTTONS
+		for button in ctx.gs.bottom_buttons {
+			if pos.x > button.pos.x && pos.x < button.pos.x + button.size.x && pos.y > button.pos.y && pos.y < button.pos.y + button.size.y {
+				log.info("inventory")
+			}
+		}
 	}
 	if input.key_pressed(.F1) {
 		DEBUG_HINTS = !DEBUG_HINTS
@@ -1017,6 +1044,7 @@ setup_player :: proc(e: ^Entity) {
 				if input.key_pressed(._1) && len(ctx.gs.quest_available) > 0 {
 					ctx.gs.current_quest = ctx.gs.quest_available[0]
 					append(&ctx.gs.last_actions, strings.concatenate({"Started quest : ", ctx.gs.current_quest.name}))
+					append(&ctx.gs.last_actions, strings.concatenate({"A note was added to your inventory"}))
 					get_player().in_discussion = false
 					ctx.gs.selecting_quest = false
 					return
